@@ -1,18 +1,36 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
+import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
+import { SQLiteProvider } from 'expo-sqlite';
+import { useEffect } from 'react';
 import { useColorScheme } from 'react-native';
 
-import { AnimatedSplashOverlay } from '@/components/animated-icon';
-import AppTabs from '@/components/app-tabs';
+import { migrate } from '@/db/migrations';
 
 SplashScreen.preventAutoHideAsync();
 
-export default function TabLayout() {
+/** Hides the splash screen once the database is migrated and the first screen can render. */
+function HideSplash() {
+  useEffect(() => {
+    SplashScreen.hide();
+  }, []);
+  return null;
+}
+
+export default function RootLayout() {
   const colorScheme = useColorScheme();
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <AnimatedSplashOverlay />
-      <AppTabs />
+      {/* Opens expenses.db on the phone and runs pending migrations before anything renders. */}
+      <SQLiteProvider databaseName="expenses.db" onInit={migrate}>
+        <HideSplash />
+        <Stack>
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="category/[id]" options={{ title: '', headerBackTitle: 'Back' }} />
+          <Stack.Screen name="expense" options={{ presentation: 'modal', title: 'Expense' }} />
+          <Stack.Screen name="plan" options={{ presentation: 'modal', title: 'Plan month' }} />
+          <Stack.Screen name="category-edit" options={{ presentation: 'modal', title: 'Category' }} />
+        </Stack>
+      </SQLiteProvider>
     </ThemeProvider>
   );
 }

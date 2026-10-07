@@ -1,56 +1,60 @@
-# Welcome to your Expo app 👋
+# Expenses
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+A monthly budgeting app for iPhone. Set the money you start the month with, a budget per
+category, log expenses, and see your current balance, the planned end-of-month balance and a
+projection based on how fast you are actually spending.
 
-## Get started
+Built with React Native + Expo (TypeScript). All data stays on the phone in SQLite. No backend.
 
-1. Install dependencies
+## Run it on your iPhone
 
-   ```bash
-   npm install
-   ```
-
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+You need Node.js 20+ on your computer and the **Expo Go** app from the App Store on your iPhone.
 
 ```bash
-npm run reset-project
+npm install
+npx expo start
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Scan the QR code with the iPhone camera. The app opens in Expo Go and reloads every time you
+save a file. Phone and computer must be on the same Wi-Fi (or run `npx expo start --tunnel`).
 
-### Other setup steps
+## Everyday commands
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+| Command | What it does |
+| --- | --- |
+| `npm test` | Unit tests: budget math, money parsing, dates, and the database layer against real SQLite |
+| `npm run typecheck` | TypeScript type check (run `npx expo start` once first so Expo generates its type files) |
+| `npm run web` | Runs the app in a browser for quick checks; the iPhone is the real target |
 
-## Learn more
+## How the code is organised
 
-To learn more about developing your project with Expo, look at the following resources:
+```
+src/
+  app/                    Screens. Expo Router turns each file into a route.
+    (tabs)/               The three tabs: Month (index), Expenses, Categories
+    category/[id].tsx     One category in the selected month
+    expense.tsx           Add / edit an expense (modal)
+    plan.tsx              Starting balance + budgets for a month (modal)
+    category-edit.tsx     Add / edit / archive a category (modal)
+  domain/                 Pure TypeScript: budget math, money, dates. No React, no database.
+  db/
+    migrations.ts         Schema, versioned with PRAGMA user_version
+    repositories/         The only code that runs SQL
+    events.ts             Tells screens to refresh after any write
+  hooks/                  useDbQuery, useMonthSummary
+  store/ui.ts             Zustand store: the selected month
+  components/             Shared UI pieces
+  config.ts               Currency setting
+```
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+Rules that keep it healthy:
 
-## Join the community
+- **Money is integer cents.** `12.34` is stored as `1234`. Never do arithmetic with floats.
+- **Screens never run SQL.** They call repositories through `useDbQuery`.
+- **Budget math stays pure.** `src/domain/budget.ts` takes plain values and returns plain values,
+  so it is fully unit tested.
+- **Schema changes are new migrations.** Never edit a migration that has shipped; append one.
 
-Join our community of developers creating universal apps.
+## Changing the currency
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+Edit `CURRENCY` in `src/config.ts` (for example `'EUR'` or `'COP'`).

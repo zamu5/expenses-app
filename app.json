@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "expenses-app",
+    "name": "Expenses",
     "slug": "expenses-app",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -20,7 +20,7 @@
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "output": "static",
+      "output": "single",
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
