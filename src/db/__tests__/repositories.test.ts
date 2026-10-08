@@ -550,3 +550,27 @@ describe('one purchase in two categories', () => {
     expect(await listExpenses(db, '2026-10')).toEqual([]);
   });
 });
+
+describe('the part of a split can be for someone else', () => {
+  it('shared groceries with clothes only for Adriana', async () => {
+    const [groceries, fun] = await Promise.all(['Groceries', 'Fun'].map(idOf));
+    await saveMonthPlan(db, { month: '2026-10', budgets: [
+      { categoryId: groceries, amountCents: 40000 },
+      { categoryId: fun, amountCents: 10000 },
+    ] });
+    await saveExpenseWithPart(
+      db,
+      null,
+      { categoryId: groceries, amountCents: 20000, spentOn: '2026-10-05', note: 'Costco', paidBy: 'sergio', forWhom: 'shared' },
+      { categoryId: fun, amountCents: 5000, forWhom: 'adriana' },
+    );
+    expect((await listExpenses(db, '2026-10', groceries))[0]).toMatchObject({ amountCents: 15000, forWhom: 'shared' });
+    expect((await listExpenses(db, '2026-10', fun))[0]).toMatchObject({ amountCents: 5000, forWhom: 'adriana', paidBy: 'sergio' });
+    // Adriana owes half of the 150.00 groceries and all of her 50.00.
+    expect(balanceCents(await getSplitTotals(db))).toBe(12500);
+    // The budgets count Sergio's share only: 75.00 of groceries, nothing of her clothes.
+    const spent = Object.fromEntries((await getMonthCategoryInputs(db, '2026-10')).map((c) => [c.id, c.spentCents]));
+    expect(spent[groceries]).toBe(7500);
+    expect(spent[fun]).toBe(0);
+  });
+});

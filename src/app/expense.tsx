@@ -24,6 +24,12 @@ import { useTheme } from '@/hooks/use-theme';
 import { confirmDestructive } from '@/lib/confirm';
 import { useUiStore } from '@/store/ui';
 
+const FOR_WHOM_OPTIONS: { value: ForWhom; label: string }[] = [
+  { value: 'shared', label: 'Shared 50/50' },
+  { value: 'sergio', label: `Only ${PEOPLE.sergio}` },
+  { value: 'adriana', label: `Only ${PEOPLE.adriana}` },
+];
+
 /** Add a new expense, or edit one when opened with ?id=. */
 export default function ExpenseScreen() {
   const { id, categoryId } = useLocalSearchParams<{ id?: string; categoryId?: string }>();
@@ -78,6 +84,8 @@ function ExpenseForm({
   const [partOpen, setPartOpen] = useState(false);
   const [partText, setPartText] = useState('');
   const [partCategoryId, setPartCategoryId] = useState<string | null>(null);
+  // Who the part was for. Null means the same as the rest of the purchase.
+  const [partForWhom, setPartForWhom] = useState<ForWhom | null>(null);
 
   const amountCents = parseAmountToCents(amountText);
   const partCents = parseAmountToCents(partText);
@@ -110,6 +118,7 @@ function ExpenseForm({
         await saveExpenseWithPart(db, expense?.id ?? null, input, {
           categoryId: partCategoryId,
           amountCents: part.partCents,
+          forWhom: partForWhom ?? forWhom,
         });
       } else if (expense) await updateExpense(db, expense.id, input);
       else await addExpense(db, input);
@@ -163,12 +172,21 @@ function ExpenseForm({
             value={partCategoryId}
             onChange={setPartCategoryId}
           />
+          <SectionLabel>That part is for</SectionLabel>
+          <Chips
+            options={FOR_WHOM_OPTIONS}
+            value={partForWhom ?? forWhom}
+            onChange={setPartForWhom}
+          />
           {part ? (
             <ThemedText type="small" themeColor="textSecondary">
               {selected?.name ?? 'First category'} {centsToInputText(part.restCents)}
               {' · '}
               {categories.find((c) => c.id === partCategoryId)?.name ?? 'other category'}{' '}
               {centsToInputText(part.partCents)}
+              {(partForWhom ?? forWhom) !== forWhom
+                ? ` (${FOR_WHOM_OPTIONS.find((o) => o.value === partForWhom)?.label})`
+                : ''}
             </ThemedText>
           ) : partText !== '' ? (
             <ThemedText type="small" style={{ color: theme.critical }}>
@@ -182,6 +200,7 @@ function ExpenseForm({
               setPartOpen(false);
               setPartText('');
               setPartCategoryId(null);
+              setPartForWhom(null);
             }}
           />
         </View>
@@ -201,11 +220,7 @@ function ExpenseForm({
 
       <SectionLabel>For</SectionLabel>
       <Chips
-        options={[
-          { value: 'shared', label: 'Shared 50/50' },
-          { value: 'sergio', label: `Only ${PEOPLE.sergio}` },
-          { value: 'adriana', label: `Only ${PEOPLE.adriana}` },
-        ]}
+        options={FOR_WHOM_OPTIONS}
         value={forWhom}
         onChange={setForWhom}
       />

@@ -131,7 +131,7 @@ export async function listDebtExpenses(db: Db): Promise<(Expense & { categoryNam
 /**
  * Saves one purchase that belongs to two categories as two expenses: `input` keeps its category
  * with the amount minus the part, and the part goes to `part.categoryId` with the same date,
- * note, payer and "for". Updates `id` when given, otherwise adds a new expense.
+ * note and payer, and its own "for" when given. Updates `id` when given, otherwise adds a new expense.
  * Both are written in one transaction, so a purchase is never half saved.
  * Returns the id of the expense created for the part.
  */
@@ -139,10 +139,16 @@ export async function saveExpenseWithPart(
   db: Db,
   id: string | null,
   input: ExpenseInput,
-  part: { categoryId: string; amountCents: number },
+  part: { categoryId: string; amountCents: number; forWhom?: ForWhom },
 ): Promise<string> {
   const main = { ...input, amountCents: input.amountCents - part.amountCents };
-  const other = { ...input, categoryId: part.categoryId, amountCents: part.amountCents };
+  const other = {
+    ...input,
+    categoryId: part.categoryId,
+    amountCents: part.amountCents,
+    // The part can be for someone else than the rest: shared groceries, clothes only for one.
+    forWhom: part.forWhom ?? input.forWhom,
+  };
   let partId = '';
   await db.withTransactionAsync(async () => {
     if (id) await updateExpense(db, id, main);
