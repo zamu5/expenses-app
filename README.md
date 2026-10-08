@@ -18,6 +18,28 @@ npx expo start
 Scan the QR code with the iPhone camera. The app opens in Expo Go and reloads every time you
 save a file. Phone and computer must be on the same Wi-Fi (or run `npx expo start --tunnel`).
 
+## Run it in Docker
+
+Needs Docker Desktop. The container runs the Expo dev server with your source folder mounted,
+so edits on your machine reload in the app.
+
+```bash
+docker compose up --build     # start; add -d to run it in the background
+docker compose down           # stop
+```
+
+Then open http://localhost:8081 in a browser for the web version.
+
+To open it from a phone on the same Wi-Fi, start it with this machine's LAN IP so the QR code
+points at it:
+
+```bash
+REACT_NATIVE_PACKAGER_HOSTNAME=$(ipconfig getifaddr en0) docker compose up
+```
+
+After changing dependencies in `package.json`, rebuild with fresh modules:
+`docker compose down -v && docker compose up --build`.
+
 ## Everyday commands
 
 | Command | What it does |
