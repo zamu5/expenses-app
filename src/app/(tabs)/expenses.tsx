@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
+import { BalanceBetweenCard } from '@/components/balance-between-card';
 import { MonthSwitcher } from '@/components/month-switcher';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -27,6 +28,8 @@ export default function ExpensesScreen() {
   const splitFilter = useUiStore((s) => s.expenseFilter);
   const setSplitFilter = useUiStore((s) => s.setExpenseFilter);
   const isSplitFiltered = splitFilter.paidBy !== 'all' || splitFilter.forWhom !== 'all';
+  const filtersOpen = useUiStore((s) => s.expenseFiltersOpen);
+  const toggleFilters = useUiStore((s) => s.toggleExpenseFilters);
 
   const { data } = useDbQuery(
     async (db) => {
@@ -41,6 +44,16 @@ export default function ExpensesScreen() {
   );
 
   const categoryName = new Map(data?.categories.map((c) => [c.id, c.name]));
+  // What is filtered right now, shown next to "Filters" so it is visible while they are folded.
+  const activeFilters = [
+    filter === ALL ? null : (categoryName.get(filter) ?? null),
+    splitFilter.paidBy === 'all' ? null : `Paid by ${PEOPLE[splitFilter.paidBy]}`,
+    splitFilter.forWhom === 'all'
+      ? null
+      : splitFilter.forWhom === 'shared'
+        ? 'Shared'
+        : `Only ${PEOPLE[splitFilter.forWhom]}`,
+  ].filter((label): label is string => label !== null);
   // The category filter is applied by the query; who paid / shared is applied here.
   const expenses = (data?.expenses ?? []).filter((e) => matchesSplitFilter(e, splitFilter));
   const days = groupByDay(expenses);
@@ -52,38 +65,61 @@ export default function ExpensesScreen() {
         <Title>Expenses</Title>
         <MonthSwitcher />
 
-        <SectionLabel>Category</SectionLabel>
-        <Chips
-          options={[
-            { value: ALL, label: 'All' },
-            ...(data?.categories ?? [])
-              .filter((c) => !c.archivedAt)
-              .map((c) => ({ value: c.id, label: c.name })),
-          ]}
-          value={filter}
-          onChange={setFilter}
-        />
-        <SectionLabel>Paid by</SectionLabel>
-        <Chips<SplitFilter['paidBy']>
-          options={[
-            { value: 'all', label: 'All' },
-            { value: 'sergio', label: PEOPLE.sergio },
-            { value: 'adriana', label: PEOPLE.adriana },
-          ]}
-          value={splitFilter.paidBy}
-          onChange={(paidBy) => setSplitFilter({ paidBy })}
-        />
-        <SectionLabel>For</SectionLabel>
-        <Chips<SplitFilter['forWhom']>
-          options={[
-            { value: 'all', label: 'All' },
-            { value: 'shared', label: 'Shared' },
-            { value: 'sergio', label: `Only ${PEOPLE.sergio}` },
-            { value: 'adriana', label: `Only ${PEOPLE.adriana}` },
-          ]}
-          value={splitFilter.forWhom}
-          onChange={(forWhom) => setSplitFilter({ forWhom })}
-        />
+        <BalanceBetweenCard />
+
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ expanded: filtersOpen }}
+          onPress={toggleFilters}
+          style={styles.between}>
+          <ThemedText type="smallBold">
+            Filters
+            {activeFilters.length > 0 ? (
+              <ThemedText type="small" themeColor="textSecondary">
+                {`  ${activeFilters.join(' · ')}`}
+              </ThemedText>
+            ) : null}
+          </ThemedText>
+          <ThemedText type="smallBold" style={{ color: theme.tint }}>
+            {filtersOpen ? 'Hide' : 'Show'}
+          </ThemedText>
+        </Pressable>
+        {filtersOpen ? (
+          <>
+            <SectionLabel>Category</SectionLabel>
+            <Chips
+              options={[
+                { value: ALL, label: 'All' },
+                ...(data?.categories ?? [])
+                  .filter((c) => !c.archivedAt)
+                  .map((c) => ({ value: c.id, label: c.name })),
+              ]}
+              value={filter}
+              onChange={setFilter}
+            />
+            <SectionLabel>Paid by</SectionLabel>
+            <Chips<SplitFilter['paidBy']>
+              options={[
+                { value: 'all', label: 'All' },
+                { value: 'sergio', label: PEOPLE.sergio },
+                { value: 'adriana', label: PEOPLE.adriana },
+              ]}
+              value={splitFilter.paidBy}
+              onChange={(paidBy) => setSplitFilter({ paidBy })}
+            />
+            <SectionLabel>For</SectionLabel>
+            <Chips<SplitFilter['forWhom']>
+              options={[
+                { value: 'all', label: 'All' },
+                { value: 'shared', label: 'Shared' },
+                { value: 'sergio', label: `Only ${PEOPLE.sergio}` },
+                { value: 'adriana', label: `Only ${PEOPLE.adriana}` },
+              ]}
+              value={splitFilter.forWhom}
+              onChange={(forWhom) => setSplitFilter({ forWhom })}
+            />
+          </>
+        ) : null}
 
         {/* Income has no category or payer, so it only shows when no filter is on. */}
         {data && filter === ALL && !isSplitFiltered && data.incomes.length > 0 ? (

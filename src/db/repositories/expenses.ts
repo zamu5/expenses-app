@@ -111,3 +111,19 @@ export async function listExpenses(
   );
   return rows.map(toExpense);
 }
+
+/**
+ * Every expense, from any month, that makes one person owe the other (see expenseDebt), newest
+ * first, with its category name for when there is no note.
+ */
+export async function listDebtExpenses(db: Db): Promise<(Expense & { categoryName: string })[]> {
+  const rows = await db.getAllAsync<ExpenseRow & { category_name: string }>(
+    `SELECT e.id, e.category_id, e.amount_cents, e.spent_on, e.note, e.paid_by, e.for_whom,
+            c.name AS category_name
+     FROM expenses e JOIN categories c ON c.id = e.category_id
+     WHERE e.deleted_at IS NULL AND e.for_whom <> e.paid_by
+     ORDER BY e.spent_on DESC, e.created_at DESC`,
+    [],
+  );
+  return rows.map((r) => ({ ...toExpense(r), categoryName: r.category_name }));
+}

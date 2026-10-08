@@ -17,6 +17,9 @@ interface UiState {
   /** Who paid / who it was for, on the Expenses tab. Kept here so it survives switching tabs. */
   expenseFilter: SplitFilter;
   setExpenseFilter: (filter: Partial<SplitFilter>) => void;
+  /** Whether the filters on the Expenses tab are unfolded. */
+  expenseFiltersOpen: boolean;
+  toggleExpenseFilters: () => void;
 }
 
 export const useUiStore = create<UiState>((set) => ({
@@ -26,5 +29,7 @@ export const useUiStore = create<UiState>((set) => ({
   lastPaidBy: 'sergio',
   setLastPaidBy: (person) => set({ lastPaidBy: person }),
   expenseFilter: NO_SPLIT_FILTER,
+  expenseFiltersOpen: false,
+  toggleExpenseFilters: () => set((s) => ({ expenseFiltersOpen: !s.expenseFiltersOpen })),
   setExpenseFilter: (filter) => set((s) => ({ expenseFilter: { ...s.expenseFilter, ...filter } })),
 }));

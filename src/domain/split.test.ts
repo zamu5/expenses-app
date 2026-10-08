@@ -1,6 +1,7 @@
 import {
   balanceCents,
   describeBalance,
+  expenseDebt,
   matchesSplitFilter,
   NO_SPLIT_FILTER,
   ownerShareCents,
@@ -95,5 +96,22 @@ describe('matchesSplitFilter', () => {
 
   it('combines both: shared expenses that Adriana paid', () => {
     expect(keep({ paidBy: 'adriana', forWhom: 'shared' })).toEqual([adrianaShared]);
+  });
+});
+
+describe('expenseDebt', () => {
+  it('is half for a shared expense, owed by whoever did not pay', () => {
+    expect(expenseDebt({ amountCents: 8334, paidBy: 'sergio', forWhom: 'shared' })).toEqual({ debtor: 'adriana', cents: 4167 });
+    expect(expenseDebt({ amountCents: 3000, paidBy: 'adriana', forWhom: 'shared' })).toEqual({ debtor: 'sergio', cents: 1500 });
+  });
+
+  it('is the full amount when one person paid something only for the other', () => {
+    expect(expenseDebt({ amountCents: 2500, paidBy: 'sergio', forWhom: 'adriana' })).toEqual({ debtor: 'adriana', cents: 2500 });
+    expect(expenseDebt({ amountCents: 2500, paidBy: 'adriana', forWhom: 'sergio' })).toEqual({ debtor: 'sergio', cents: 2500 });
+  });
+
+  it('is nothing when someone paid for themselves', () => {
+    expect(expenseDebt({ amountCents: 2500, paidBy: 'sergio', forWhom: 'sergio' })).toBeNull();
+    expect(expenseDebt({ amountCents: 2500, paidBy: 'adriana', forWhom: 'adriana' })).toBeNull();
   });
 });

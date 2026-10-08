@@ -73,3 +73,21 @@ export function matchesSplitFilter(
     (filter.forWhom === 'all' || expense.forWhom === filter.forWhom)
   );
 }
+
+/**
+ * What one expense adds to the balance between the two people: who owes, and how much.
+ * A shared expense makes the other person owe half; an expense that was only for the other
+ * person makes them owe all of it; paying for yourself creates no debt (null).
+ */
+export function expenseDebt(expense: {
+  amountCents: Cents;
+  paidBy: Person;
+  forWhom: ForWhom;
+}): { debtor: Person; cents: Cents } | null {
+  if (expense.forWhom === expense.paidBy) return null;
+  const debtor = otherPerson(expense.paidBy);
+  return {
+    debtor,
+    cents: expense.forWhom === 'shared' ? Math.round(expense.amountCents / 2) : expense.amountCents,
+  };
+}

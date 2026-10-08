@@ -4,7 +4,7 @@
 import { computeNetWorth } from '@/domain/accounts';
 import { parseBackup } from '@/domain/backup';
 import { computeMonthSummary } from '@/domain/budget';
-import { balanceCents } from '@/domain/split';
+import { balanceCents, expenseDebt } from '@/domain/split';
 
 import { subscribeToDataChanges } from '../events';
 import { LATEST_SCHEMA_VERSION, migrate } from '../migrations';
@@ -23,7 +23,13 @@ import {
   listCategoriesForMonth,
   setCategoryArchived,
 } from '../repositories/categories';
-import { addExpense, deleteExpense, listExpenses, updateExpense } from '../repositories/expenses';
+import {
+  addExpense,
+  deleteExpense,
+  listDebtExpenses,
+  listExpenses,
+  updateExpense,
+} from '../repositories/expenses';
 import { addIncome, deleteIncome, getIncomeTotal, listIncomes, updateIncome } from '../repositories/incomes';
 import {
   getBudgets,
@@ -435,5 +441,25 @@ describe('include in starting balance', () => {
     ];
     await restoreBackup(db, parsed.backup);
     expect((await listAccounts(db))[0]).toMatchObject({ name: 'Old', includeInStart: true });
+  });
+});
+
+describe('the detail behind what is owed', () => {
+  it('lists only expenses that create a debt, from every month, with the category name', async () => {
+    const [fun, transport] = await Promise.all(['Fun', 'Transport'].map(idOf));
+    await addExpense(db, { categoryId: transport, amountCents: 8334, spentOn: '2026-09-28', paidBy: 'sergio', forWhom: 'shared' });
+    await addExpense(db, { categoryId: fun, amountCents: 3000, spentOn: '2026-10-03', paidBy: 'adriana', forWhom: 'shared', note: 'Movie' });
+    await addExpense(db, { categoryId: fun, amountCents: 2500, spentOn: '2026-10-04', paidBy: 'sergio', forWhom: 'adriana' });
+    await addExpense(db, { categoryId: fun, amountCents: 999, spentOn: '2026-10-05', paidBy: 'sergio', forWhom: 'sergio' });
+    await deleteExpense(db, await addExpense(db, { categoryId: fun, amountCents: 5000, spentOn: '2026-10-06', paidBy: 'adriana', forWhom: 'sergio' }));
+
+    const items = (await listDebtExpenses(db)).map((e) => ({ label: e.note ?? e.categoryName, ...expenseDebt(e)! }));
+    expect(items).toEqual([
+      { label: 'Fun', debtor: 'adriana', cents: 2500 },
+      { label: 'Movie', debtor: 'sergio', cents: 1500 },
+      { label: 'Transport', debtor: 'adriana', cents: 4167 },
+    ]);
+    // The items add up to the balance: 2,500 + 4,167 - 1,500.
+    expect(balanceCents(await getSplitTotals(db))).toBe(5167);
   });
 });

@@ -6,10 +6,11 @@ import { balanceSentence } from '@/components/split-label';
 import { ThemedText } from '@/components/themed-text';
 import { Button, Card, Chips, EmptyState, Field, Money, Screen, SectionLabel } from '@/components/ui';
 import { PEOPLE } from '@/config';
+import { listDebtExpenses } from '@/db/repositories/expenses';
 import { addSettlement, deleteSettlement, listSettlements } from '@/db/repositories/settlements';
 import { formatDay, todayISO } from '@/domain/dates';
 import { centsToInputText, parseAmountToCents } from '@/domain/money';
-import { otherPerson, type Person, type SplitTotals } from '@/domain/split';
+import { expenseDebt, otherPerson, type Person, type SplitTotals } from '@/domain/split';
 import { useBalance } from '@/hooks/use-balance';
 import { useDbQuery } from '@/hooks/use-db-query';
 import { useTheme } from '@/hooks/use-theme';
@@ -20,6 +21,7 @@ export default function BalanceScreen() {
   const db = useSQLiteContext();
   const { data } = useBalance();
   const { data: settlements } = useDbQuery(listSettlements, []);
+  const { data: debtExpenses } = useDbQuery(listDebtExpenses, []);
 
   if (!data) return null;
   const { balance, totals } = data;
@@ -35,6 +37,47 @@ export default function BalanceScreen() {
           Running total of every month. Shared expenses are split 50/50.
         </ThemedText>
       </Card>
+
+      {(['adriana', 'sergio'] as const).map((debtor) => {
+        // One row per expense: what it is, and the part this person owes, not the full amount.
+        const items = (debtExpenses ?? []).flatMap((e) => {
+          const debt = expenseDebt(e);
+          return debt && debt.debtor === debtor ? [{ expense: e, cents: debt.cents }] : [];
+        });
+        if (items.length === 0) return null;
+        return (
+          <View key={debtor} style={{ gap: 6 }}>
+            <View style={styles.between}>
+              <SectionLabel>
+                {PEOPLE[debtor]} owes {PEOPLE[otherPerson(debtor)]} for
+              </SectionLabel>
+              <Money
+                cents={items.reduce((sum, i) => sum + i.cents, 0)}
+                type="small"
+                color={theme.textSecondary}
+              />
+            </View>
+            <Card style={{ gap: 0, paddingVertical: 4 }}>
+              {items.map(({ expense: e, cents }, i) => (
+                <View
+                  key={e.id}
+                  style={[
+                    styles.row,
+                    i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.separator },
+                  ]}>
+                  <View style={{ flex: 1 }}>
+                    <ThemedText numberOfLines={1}>{e.note ?? e.categoryName}</ThemedText>
+                    <ThemedText type="small" themeColor="textSecondary">
+                      {formatDay(e.spentOn)} · {e.forWhom === 'shared' ? 'half of shared' : 'paid in full'}
+                    </ThemedText>
+                  </View>
+                  <Money cents={cents} />
+                </View>
+              ))}
+            </Card>
+          </View>
+        );
+      })}
 
       <SectionLabel>Where it comes from</SectionLabel>
       <Card>
