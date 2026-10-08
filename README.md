@@ -109,8 +109,7 @@ can be shared or for one person, like an expense.
 
 Every income or refund can also go **into an account**: the amount is added to that account's
 balance (and taken back out if you edit or delete it). One account can be marked as the default
-for income, so it is pre-selected. "Started with" leaves this month's deposits out, so income is
-not counted twice.
+for income, so it is pre-selected.
 
 ### Credit cards and what an expense was paid with
 
