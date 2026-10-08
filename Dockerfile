@@ -16,6 +16,6 @@ COPY . .
 
 ENV EXPO_NO_TELEMETRY=1
 
-EXPOSE 8081
+EXPOSE 8082
 
-CMD ["npx", "expo", "start", "--host", "lan", "--port", "8081"]
+CMD ["npx", "expo", "start", "--host", "lan", "--port", "8082"]

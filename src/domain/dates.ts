@@ -59,3 +59,9 @@ export function formatDay(date: ISODate, locale?: string): string {
     new Date(year, m - 1, day),
   );
 }
+
+/** A day as a Date at local midnight, for date pickers. */
+export function toDate(date: ISODate): Date {
+  const [year, m, day] = date.split('-').map(Number);
+  return new Date(year, m - 1, day);
+}

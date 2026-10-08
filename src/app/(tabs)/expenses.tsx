@@ -9,6 +9,7 @@ import { splitLabel } from '@/components/split-label';
 import { Card, Chips, EmptyState, Fab, Money, Screen, SectionLabel, Title } from '@/components/ui';
 import { listCategories } from '@/db/repositories/categories';
 import { listExpenses } from '@/db/repositories/expenses';
+import { listIncomes } from '@/db/repositories/incomes';
 import type { Expense } from '@/db/types';
 import { formatDay } from '@/domain/dates';
 import { useDbQuery } from '@/hooks/use-db-query';
@@ -24,11 +25,12 @@ export default function ExpensesScreen() {
 
   const { data } = useDbQuery(
     async (db) => {
-      const [expenses, categories] = await Promise.all([
+      const [expenses, categories, incomes] = await Promise.all([
         listExpenses(db, selectedMonth, filter === ALL ? undefined : filter),
         listCategories(db, { includeArchived: true }),
+        listIncomes(db, selectedMonth),
       ]);
-      return { expenses, categories };
+      return { expenses, categories, incomes };
     },
     [selectedMonth, filter],
   );
@@ -53,6 +55,41 @@ export default function ExpensesScreen() {
           value={filter}
           onChange={setFilter}
         />
+
+        {/* Income has no category, so it only shows when no category filter is on. */}
+        {data && filter === ALL && data.incomes.length > 0 ? (
+          <View style={{ gap: 6 }}>
+            <View style={styles.between}>
+              <SectionLabel>Income</SectionLabel>
+              <Money
+                cents={data.incomes.reduce((sum, i) => sum + i.amountCents, 0)}
+                type="small"
+                color={theme.good}
+              />
+            </View>
+            <Card style={{ gap: 0, paddingVertical: 4 }}>
+              {data.incomes.map((income, i) => (
+                <Pressable
+                  key={income.id}
+                  onPress={() => router.push({ pathname: '/income', params: { id: income.id } })}
+                  style={({ pressed }) => [
+                    styles.row,
+                    i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.separator },
+                    { opacity: pressed ? 0.6 : 1 },
+                  ]}>
+                  <View style={{ flex: 1 }}>
+                    <ThemedText>{income.note ?? 'Income'}</ThemedText>
+                    <ThemedText type="small" themeColor="textSecondary">
+                      {formatDay(income.receivedOn)}
+                    </ThemedText>
+                  </View>
+                  <ThemedText style={{ color: theme.good }}>+</ThemedText>
+                  <Money cents={income.amountCents} color={theme.good} />
+                </Pressable>
+              ))}
+            </Card>
+          </View>
+        ) : null}
 
         {data && data.expenses.length === 0 ? (
           <EmptyState title="No expenses yet" body="Tap + to log what you spend." />

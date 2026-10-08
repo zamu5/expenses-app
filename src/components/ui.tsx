@@ -56,14 +56,17 @@ export function Money({
   cents,
   type = 'default',
   color,
+  currency = CURRENCY,
 }: {
   cents: number;
   type?: 'default' | 'small' | 'smallBold' | 'subtitle';
   color?: string;
+  /** ISO code; defaults to the home currency. */
+  currency?: string;
 }) {
   return (
     <ThemedText type={type} style={[{ fontVariant: ['tabular-nums'] }, color ? { color } : null]}>
-      {formatCents(cents, CURRENCY)}
+      {formatCents(cents, currency)}
     </ThemedText>
   );
 }

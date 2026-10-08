@@ -85,3 +85,28 @@ describe('summarizeCategory', () => {
     expect(rent.projectedSpendCents).toBe(120000);
   });
 });
+
+describe('income', () => {
+  it('raises the current, planned and projected balances', () => {
+    const without = computeMonthSummary({ startingBalanceCents: 300000, categories: october, daysInMonth: 31, daysElapsed: 7 });
+    const withSalary = computeMonthSummary({
+      startingBalanceCents: 300000,
+      incomeCents: 250000,
+      categories: october,
+      daysInMonth: 31,
+      daysElapsed: 7,
+    });
+    expect(without.totalIncomeCents).toBe(0);
+    expect(withSalary.totalIncomeCents).toBe(250000);
+    expect(withSalary.currentBalanceCents).toBe(without.currentBalanceCents + 250000);
+    expect(withSalary.plannedEndCents).toBe(without.plannedEndCents + 250000);
+    expect(withSalary.projectedEndCents).toBe(without.projectedEndCents + 250000);
+    expect(withSalary.totalSpentCents).toBe(without.totalSpentCents);
+  });
+
+  it('can turn a month that was heading below zero back on track', () => {
+    const tight = { startingBalanceCents: 100000, categories: october, daysInMonth: 31, daysElapsed: 7 };
+    expect(computeMonthSummary(tight).status).toBe('danger');
+    expect(computeMonthSummary({ ...tight, incomeCents: 300000 }).status).not.toBe('danger');
+  });
+});

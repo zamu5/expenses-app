@@ -28,7 +28,8 @@ docker compose up --build     # start; add -d to run it in the background
 docker compose down           # stop
 ```
 
-Then open http://localhost:8081 in a browser for the web version.
+Then open http://localhost:8082 in a browser for the web version. The container uses port 8082 so
+it can stay up while `npx expo start` runs on the Mac on its usual port, 8081.
 
 To open it from a phone on the same Wi-Fi, start it with this machine's LAN IP so the QR code
 points at it:
@@ -92,6 +93,36 @@ Budgets still count the full amount of every expense, whoever paid.
 
 The math is in `src/domain/split.ts`. The two names are `PEOPLE` in `src/config.ts`.
 
-## Changing the currency
+## Income
 
-Edit `CURRENCY` in `src/config.ts` (for example `'EUR'` or `'COP'`).
+Money you receive (salary, a refund) is logged with **+ Add income** on the Month tab. It is not
+an expense: it raises the month's current, planned and projected balances.
+
+## Accounts and planned expenses
+
+The Accounts tab shows everything in one place: each account in its own currency, the expenses you
+are planning for but have not put in a month (counted as negative), and a total in your home
+currency. Nothing is predefined; you add, rename and delete accounts yourself.
+
+- Mark one account as the **Budget account**: its balance is not typed, it follows the current
+  balance of the month selected in the app.
+- Other balances are typed in by hand, and so are exchange rates ("1 CAD = how many COP?").
+  A currency without a rate is shown but left out of the total.
+
+The math is in `src/domain/accounts.ts`.
+
+## Backup and restore
+
+The data lives only on the device (or, on the web, in that browser for that exact address), so
+make backups. **Backup and restore** at the bottom of the Month tab exports everything to one file,
+`expenses-backup-YYYY-MM-DD.json`: on the iPhone through the share sheet (save it to Files or
+iCloud Drive), on the web as a download.
+
+Restoring picks such a file, shows what is in it, and after you confirm replaces all the data in
+the app with it. If anything in the file cannot be restored, nothing is changed. The file format
+is in `src/domain/backup.ts`.
+
+## Changing the home currency
+
+Edit `CURRENCY` in `src/config.ts` (for example `'EUR'` or `'COP'`). The budget is in this currency
+and the Accounts total is converted to it.

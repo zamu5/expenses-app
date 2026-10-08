@@ -53,6 +53,7 @@ export default function MonthScreen() {
           <>
             <BalanceCard
               startingCents={data.month.startingBalanceCents}
+              incomeCents={data.summary.totalIncomeCents}
               currentCents={data.summary.currentBalanceCents}
               plannedCents={data.summary.plannedEndCents}
               projectedCents={data.summary.projectedEndCents}
@@ -70,6 +71,8 @@ export default function MonthScreen() {
             <Button title="Edit plan" variant="secondary" onPress={() => router.push('/plan')} />
           </>
         ) : null}
+
+        <Button title="Backup and restore" variant="secondary" onPress={() => router.push('/settings')} />
       </Screen>
       <Fab label="Add expense" onPress={() => router.push('/expense')} />
     </ThemedView>
@@ -78,6 +81,7 @@ export default function MonthScreen() {
 
 function BalanceCard(props: {
   startingCents: number;
+  incomeCents: number;
   currentCents: number;
   plannedCents: number;
   projectedCents: number;
@@ -86,6 +90,7 @@ function BalanceCard(props: {
   daysElapsed: number;
   daysInMonth: number;
 }) {
+  const theme = useTheme();
   const statusColor = useStatusColor(props.status);
   const dayLabel =
     props.daysElapsed === 0
@@ -116,6 +121,14 @@ function BalanceCard(props: {
           cents={props.projectedCents}
           color={statusColor}
         />
+      </View>
+      <View style={[styles.between, styles.incomeRow, { borderTopColor: theme.separator }]}>
+        <Stat label="Income this month" cents={props.incomeCents} color={theme.good} />
+        <Pressable accessibilityRole="button" hitSlop={12} onPress={() => router.push('/income')}>
+          <ThemedText type="smallBold" style={{ color: theme.tint }}>
+            + Add income
+          </ThemedText>
+        </Pressable>
       </View>
     </Card>
   );
@@ -190,4 +203,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.two,
   },
+  incomeRow: { borderTopWidth: StyleSheet.hairlineWidth, paddingTop: Spacing.two },
 });
