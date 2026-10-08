@@ -204,8 +204,8 @@ const formatPlain = (cents: number) =>
   );
 
 /**
- * One category as a small box. Top right: what is left of its budget. Then its name, what was
- * spent of how much, and a bar.
+ * One category as a small box. First line: its name, and on the right what is left of its
+ * budget. Then what was spent of how much, and a bar.
  */
 function CategoryTile({ category: c, width }: { category: CategorySummary; width: number }) {
   const theme = useTheme();
@@ -224,26 +224,28 @@ function CategoryTile({ category: c, width }: { category: CategorySummary; width
         styles.tile,
         { width, backgroundColor: theme.backgroundElement, opacity: pressed ? 0.7 : isDone ? 0.55 : 1 },
       ]}>
-      <View style={styles.tileTopRight}>
+      {/* Name on the left, what is left on the right, on the same line. */}
+      <View style={styles.tileHeader}>
         <ThemedText
-          numberOfLines={1}
+          type="small"
+          numberOfLines={3}
           adjustsFontSizeToFit
-          style={[styles.tileAmount, { color: isOver ? theme.critical : theme.text }]}>
-          {isDone ? '✓ Paid' : formatPlain(c.remainingCents)}
+          minimumFontScale={0.75}
+          style={styles.tileName}>
+          {c.name}
         </ThemedText>
-        {/* The word carries the meaning too, so it does not depend on the colour alone. */}
-        <ThemedText type="small" style={[styles.tileCaption, { color: isOver ? theme.critical : theme.textSecondary }]}>
-          {isDone ? 'done' : isOver ? 'over' : 'left'}
-        </ThemedText>
+        <View style={styles.tileTopRight}>
+          <ThemedText
+            numberOfLines={1}
+            style={[styles.tileAmount, { color: isOver ? theme.critical : theme.text }]}>
+            {isDone ? '✓ Paid' : formatPlain(c.remainingCents)}
+          </ThemedText>
+          {/* The word carries the meaning too, so it does not depend on the colour alone. */}
+          <ThemedText type="small" style={[styles.tileCaption, { color: isOver ? theme.critical : theme.textSecondary }]}>
+            {isDone ? 'done' : isOver ? 'over' : 'left'}
+          </ThemedText>
+        </View>
       </View>
-      <ThemedText
-        type="small"
-        numberOfLines={2}
-        adjustsFontSizeToFit
-        minimumFontScale={0.75}
-        style={styles.tileName}>
-        {c.name}
-      </ThemedText>
       <View>
         <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} adjustsFontSizeToFit style={styles.tileCaption}>
           {formatPlain(c.spentCents)} spent
@@ -275,9 +277,12 @@ const styles = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap' },
   tile: { borderRadius: 12, padding: 6, justifyContent: 'space-between', gap: Spacing.one },
   // Two lines are always reserved, so tiles in a row line up whatever the name length.
-  tileName: { fontSize: 15, lineHeight: 18, fontWeight: 700, minHeight: 36 },
-  tileTopRight: { alignItems: 'flex-end' },
-  tileAmount: { fontSize: 13, lineHeight: 16, fontWeight: 600, fontVariant: ['tabular-nums'] },
+  tileHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 3, minHeight: 45 },
+  // Takes whatever width the amount leaves, wrapping onto more lines.
+  tileName: { flex: 1, minWidth: 0, fontSize: 13, lineHeight: 15, fontWeight: 700 },
+  // Never shrinks: the amount is always whole, and the name gets what is left.
+  tileTopRight: { alignItems: 'flex-end', flexShrink: 0 },
+  tileAmount: { fontSize: 11, lineHeight: 15, fontWeight: 700, fontVariant: ['tabular-nums'] },
   tileCaption: { fontSize: 10, lineHeight: 13, fontVariant: ['tabular-nums'] },
   between: {
     flexDirection: 'row',
