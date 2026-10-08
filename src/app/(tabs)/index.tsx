@@ -75,6 +75,7 @@ export default function MonthScreen() {
               currentCents={overview?.netWorth.totalHomeCents ?? 0}
               missingRates={overview?.netWorth.missingRates ?? []}
               plannedCents={data.summary.plannedEndCents}
+              leftToSpendCents={overview?.leftToSpendCents ?? 0}
               status={data.summary.status}
               statusReason={explainMonthStatus(data.summary, (cents) => formatCents(cents, CURRENCY))}
               daysElapsed={data.daysElapsed}
@@ -112,6 +113,8 @@ function BalanceCard(props: {
   missingRates: string[];
   /** Money in the account you pay from: start + income - what you paid, with payments between you two. */
   plannedCents: number;
+  /** The month's budget not spent yet, added over the categories. */
+  leftToSpendCents: number;
   status: 'onTrack' | 'watch' | 'danger';
   /** Shown as a legend while the pointer is over the status (or a finger is held on it). */
   statusReason: string;
@@ -165,6 +168,7 @@ function BalanceCard(props: {
       </Pressable>
       <View style={styles.between}>
         <Stat label="Started with" cents={props.startingCents} onPress={() => router.push('/plan')} />
+        <Stat label="Left to spend" cents={props.leftToSpendCents} />
         <Stat label="Planned end" cents={props.plannedCents} />
       </View>
       <View style={[styles.between, styles.incomeRow, { borderTopColor: theme.separator }]}>
@@ -195,7 +199,13 @@ function Stat({
       <ThemedText type="small" themeColor="textSecondary">
         {label}
       </ThemedText>
-      <Money cents={cents} type="smallBold" color={color} />
+      {/* A little smaller than usual and kept on one line, so three stats fit across a phone. */}
+      <ThemedText
+        type="smallBold"
+        numberOfLines={1}
+        style={[styles.statAmount, color ? { color } : null]}>
+        {formatCents(cents, CURRENCY)}
+      </ThemedText>
     </Pressable>
   );
 }
@@ -288,6 +298,7 @@ function CategoryTile({
 }
 
 const styles = StyleSheet.create({
+  statAmount: { fontSize: 13, fontVariant: ['tabular-nums'] },
   // Floats under the status label, over the rest of the card.
   legend: {
     position: 'absolute',
