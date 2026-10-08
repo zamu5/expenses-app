@@ -28,6 +28,8 @@ export interface CategorySummary extends CategoryInput {
 
 export interface MonthInput {
   startingBalanceCents: Cents;
+  /** Money received during the month (salary, refunds). Defaults to 0. */
+  incomeCents?: Cents;
   categories: CategoryInput[];
   daysInMonth: number;
   /** Days of the month that have passed, counting today (0 for a future month, all for a past one). */
@@ -39,7 +41,8 @@ export interface MonthInput {
 export interface MonthSummary {
   totalBudgetCents: Cents;
   totalSpentCents: Cents;
-  /** Money you should have right now. */
+  totalIncomeCents: Cents;
+  /** Money you should have right now: what you started with, plus income, minus spending. */
   currentBalanceCents: Cents;
   /** Money left at the end if every category spends exactly its budget. */
   plannedEndCents: Cents;
@@ -104,9 +107,11 @@ export function computeMonthSummary(input: MonthInput): MonthSummary {
 
   const totalBudgetCents = sum((c) => c.budgetCents);
   const totalSpentCents = sum((c) => c.spentCents);
-  const currentBalanceCents = startingBalanceCents - totalSpentCents;
-  const plannedEndCents = startingBalanceCents - totalBudgetCents;
-  const projectedEndCents = startingBalanceCents - sum((c) => c.projectedSpendCents);
+  const totalIncomeCents = input.incomeCents ?? 0;
+  const availableCents = startingBalanceCents + totalIncomeCents;
+  const currentBalanceCents = availableCents - totalSpentCents;
+  const plannedEndCents = availableCents - totalBudgetCents;
+  const projectedEndCents = availableCents - sum((c) => c.projectedSpendCents);
 
   let status: MonthStatus = 'onTrack';
   if (projectedEndCents < 0) status = 'danger';
@@ -115,6 +120,7 @@ export function computeMonthSummary(input: MonthInput): MonthSummary {
   return {
     totalBudgetCents,
     totalSpentCents,
+    totalIncomeCents,
     currentBalanceCents,
     plannedEndCents,
     projectedEndCents,

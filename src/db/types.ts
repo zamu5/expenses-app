@@ -40,6 +40,40 @@ export interface Expense {
   forWhom: ForWhom;
 }
 
+/** Money received: a salary, a refund. It raises the month's balance; it is not a negative expense. */
+export interface Income {
+  id: string;
+  amountCents: number;
+  receivedOn: string;
+  note: string | null;
+}
+
+export type AccountKind = 'account' | 'planned';
+
+/**
+ * Somewhere money is (kind 'account'), or an expense you expect but have not tied to a month
+ * (kind 'planned': typed as a positive amount, counted as negative in the totals).
+ */
+export interface Account {
+  id: string;
+  name: string;
+  kind: AccountKind;
+  /** ISO 4217 code, e.g. 'CAD' or 'COP'. */
+  currency: string;
+  balanceCents: number;
+  /** The one account the monthly budget lives in. Its balance comes from the budget, not from typing. */
+  isBudgetAccount: boolean;
+  /** Day the balance was last typed in. */
+  balanceUpdatedOn: string;
+}
+
+/** How many units of `currency` one unit of the home currency buys, e.g. 1 CAD = 2950 COP. */
+export interface ExchangeRate {
+  currency: string;
+  unitsPerHome: number;
+  setOn: string;
+}
+
 /** Money one person handed to the other to pay back what they owed. */
 export interface Settlement {
   id: string;

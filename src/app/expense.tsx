@@ -1,19 +1,21 @@
 import { useSQLiteContext } from 'expo-sqlite';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Pressable, StyleSheet, View } from 'react-native';
+import { Alert, StyleSheet, View } from 'react-native';
 
+import { DateField } from '@/components/date-field';
 import { ThemedText } from '@/components/themed-text';
-import { Button, Card, Chips, Field, Screen, SectionLabel } from '@/components/ui';
+import { Button, Chips, Field, Screen, SectionLabel } from '@/components/ui';
 import { PEOPLE } from '@/config';
 import { listCategories, listCategoriesForMonth } from '@/db/repositories/categories';
 import { addExpense, deleteExpense, getExpense, updateExpense } from '@/db/repositories/expenses';
 import type { Category, Expense } from '@/db/types';
-import { formatDay, monthKeyOf, shiftDay, todayISO } from '@/domain/dates';
+import { monthKeyOf, todayISO } from '@/domain/dates';
 import { centsToInputText, parseAmountToCents } from '@/domain/money';
 import type { ForWhom, Person } from '@/domain/split';
 import { useDbQuery } from '@/hooks/use-db-query';
 import { useTheme } from '@/hooks/use-theme';
+import { confirmDestructive } from '@/lib/confirm';
 import { useUiStore } from '@/store/ui';
 
 /** Add a new expense, or edit one when opened with ?id=. */
@@ -100,17 +102,10 @@ function ExpenseForm({
 
   function confirmDelete() {
     if (!expense) return;
-    Alert.alert('Delete this expense?', undefined, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          await deleteExpense(db, expense.id);
-          router.back();
-        },
-      },
-    ]);
+    confirmDestructive('Delete this expense?', 'Delete', async () => {
+      await deleteExpense(db, expense.id);
+      router.back();
+    });
   }
 
   return (
@@ -155,22 +150,7 @@ function ExpenseForm({
       />
 
       <SectionLabel>Date</SectionLabel>
-      <Card style={styles.dateRow}>
-        <Pressable hitSlop={12} onPress={() => setSpentOn(shiftDay(spentOn, -1))}>
-          <ThemedText style={[styles.arrow, { color: theme.tint }]}>‹</ThemedText>
-        </Pressable>
-        <Pressable onPress={() => setSpentOn(today)} style={{ alignItems: 'center' }}>
-          <ThemedText>{spentOn === today ? 'Today' : formatDay(spentOn)}</ThemedText>
-          {spentOn !== today ? (
-            <ThemedText type="small" style={{ color: theme.tint }}>
-              Set to today
-            </ThemedText>
-          ) : null}
-        </Pressable>
-        <Pressable hitSlop={12} onPress={() => setSpentOn(shiftDay(spentOn, 1))}>
-          <ThemedText style={[styles.arrow, { color: theme.tint }]}>›</ThemedText>
-        </Pressable>
-      </Card>
+      <DateField value={spentOn} onChange={setSpentOn} />
 
       <Field label="Note (optional)" value={note} onChangeText={setNote} placeholder="What was it?" />
 
@@ -184,6 +164,4 @@ function ExpenseForm({
 
 const styles = StyleSheet.create({
   amount: { fontSize: 34, fontWeight: 600, paddingVertical: 16 },
-  dateRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  arrow: { fontSize: 30, lineHeight: 34, paddingHorizontal: 8 },
 });

@@ -100,6 +100,43 @@ const migrations: ((db: Db) => Promise<void>)[] = [
       );
     `);
   },
+
+  // Version 3: income, and the accounts / planned expenses behind the Accounts tab.
+  async (db) => {
+    await db.execAsync(`
+      CREATE TABLE incomes (
+        id TEXT PRIMARY KEY NOT NULL,
+        amount_cents INTEGER NOT NULL CHECK (amount_cents > 0),
+        received_on TEXT NOT NULL,
+        note TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      );
+      CREATE INDEX incomes_received_on ON incomes (received_on);
+
+      CREATE TABLE accounts (
+        id TEXT PRIMARY KEY NOT NULL,
+        name TEXT NOT NULL,
+        kind TEXT NOT NULL CHECK (kind IN ('account', 'planned')),
+        currency TEXT NOT NULL,
+        balance_cents INTEGER NOT NULL DEFAULT 0,
+        is_budget_account INTEGER NOT NULL DEFAULT 0,
+        balance_updated_on TEXT NOT NULL,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      );
+
+      CREATE TABLE exchange_rates (
+        currency TEXT PRIMARY KEY NOT NULL,
+        units_per_home REAL NOT NULL CHECK (units_per_home > 0),
+        set_on TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `);
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = migrations.length;

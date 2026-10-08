@@ -10,6 +10,10 @@ export default function TabsLayout() {
         <NativeTabs.Trigger.Label>Month</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf={{ default: 'chart.pie', selected: 'chart.pie.fill' }} />
       </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="accounts">
+        <NativeTabs.Trigger.Label>Accounts</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf={{ default: 'banknote', selected: 'banknote.fill' }} />
+      </NativeTabs.Trigger>
       <NativeTabs.Trigger name="expenses">
         <NativeTabs.Trigger.Label>Expenses</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="list.bullet" />

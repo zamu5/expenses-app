@@ -1,11 +1,20 @@
 /**
  * @jest-environment node
  */
+import { computeNetWorth } from '@/domain/accounts';
 import { computeMonthSummary } from '@/domain/budget';
 import { balanceCents } from '@/domain/split';
 
 import { subscribeToDataChanges } from '../events';
 import { LATEST_SCHEMA_VERSION, migrate } from '../migrations';
+import {
+  createAccount,
+  deleteAccount,
+  listAccounts,
+  listExchangeRates,
+  setExchangeRate,
+  updateAccount,
+} from '../repositories/accounts';
 import {
   createCategory,
   listCategories,
@@ -13,6 +22,7 @@ import {
   setCategoryArchived,
 } from '../repositories/categories';
 import { addExpense, deleteExpense, listExpenses, updateExpense } from '../repositories/expenses';
+import { addIncome, deleteIncome, getIncomeTotal, listIncomes, updateIncome } from '../repositories/incomes';
 import {
   getBudgets,
   getMonth,
@@ -230,5 +240,69 @@ describe('who owes whom', () => {
     expect(await listSettlements(db)).toEqual([
       expect.objectContaining({ fromPerson: 'adriana', toPerson: 'sergio', amountCents: 4500 }),
     ]);
+  });
+});
+
+describe('income', () => {
+  it('is totalled per month and ignores deleted rows', async () => {
+    const salary = await addIncome(db, { amountCents: 250000, receivedOn: '2026-10-15', note: ' Salary ' });
+    await addIncome(db, { amountCents: 5000, receivedOn: '2026-10-20' });
+    await addIncome(db, { amountCents: 99900, receivedOn: '2026-11-01' });
+    expect(await getIncomeTotal(db, '2026-10')).toBe(255000);
+    expect((await listIncomes(db, '2026-10')).map((i) => i.note)).toEqual([null, 'Salary']);
+
+    await updateIncome(db, salary, { amountCents: 260000, receivedOn: '2026-10-15' });
+    expect(await getIncomeTotal(db, '2026-10')).toBe(265000);
+    await deleteIncome(db, salary);
+    expect(await getIncomeTotal(db, '2026-10')).toBe(5000);
+    expect(await getIncomeTotal(db, '2026-12')).toBe(0);
+  });
+
+  it('refuses an income of zero', async () => {
+    await expect(addIncome(db, { amountCents: 0, receivedOn: '2026-10-15' })).rejects.toThrow(/CHECK/);
+  });
+});
+
+describe('accounts', () => {
+  const account = (name: string, currency: string, balanceCents: number, extra = {}) =>
+    createAccount(db, { name, kind: 'account', currency, balanceCents, balanceUpdatedOn: '2026-10-07', ...extra });
+
+  it('starts with none, and lists accounts before planned expenses', async () => {
+    expect(await listAccounts(db)).toEqual([]);
+    await createAccount(db, { name: 'Trip', kind: 'planned', currency: 'CAD', balanceCents: 300000, balanceUpdatedOn: '2026-10-07' });
+    await account(' Savings ', 'CAD', 1000000);
+    expect((await listAccounts(db)).map((a) => [a.name, a.kind])).toEqual([
+      ['Savings', 'account'],
+      ['Trip', 'planned'],
+    ]);
+  });
+
+  it('keeps a single budget account', async () => {
+    const first = await account('Chequing', 'CAD', 0, { isBudgetAccount: true });
+    const second = await account('Other', 'CAD', 0, { isBudgetAccount: true });
+    const budget = (await listAccounts(db)).filter((a) => a.isBudgetAccount);
+    expect(budget.map((a) => a.id)).toEqual([second]);
+
+    await updateAccount(db, first, { name: 'Chequing', kind: 'account', currency: 'CAD', balanceCents: 0, isBudgetAccount: true, balanceUpdatedOn: '2026-10-08' });
+    expect((await listAccounts(db)).filter((a) => a.isBudgetAccount).map((a) => a.id)).toEqual([first]);
+  });
+
+  it('feeds the net worth math, with a typed exchange rate', async () => {
+    await account('Investments', 'CAD', 1000000);
+    const pesos = await account('Pesos', 'COP', 295000000);
+    await account('More pesos', 'COP', 295000000);
+    await createAccount(db, { name: 'Trip', kind: 'planned', currency: 'CAD', balanceCents: 300000, balanceUpdatedOn: '2026-10-07' });
+
+    const rates = async () => Object.fromEntries((await listExchangeRates(db)).map((r) => [r.currency, r.unitsPerHome]));
+    expect(computeNetWorth(await listAccounts(db), await rates(), 'CAD').missingRates).toEqual(['COP']);
+
+    await setExchangeRate(db, { currency: 'COP', unitsPerHome: 3000, setOn: '2026-10-01' });
+    await setExchangeRate(db, { currency: 'COP', unitsPerHome: 2950, setOn: '2026-10-07' });
+    expect(await listExchangeRates(db)).toEqual([{ currency: 'COP', unitsPerHome: 2950, setOn: '2026-10-07' }]);
+    // 10,000 + 2,000 (5,900,000 COP) - 3,000 planned
+    expect(computeNetWorth(await listAccounts(db), await rates(), 'CAD').totalHomeCents).toBe(900000);
+
+    await deleteAccount(db, pesos);
+    expect(computeNetWorth(await listAccounts(db), await rates(), 'CAD').totalHomeCents).toBe(800000);
   });
 });

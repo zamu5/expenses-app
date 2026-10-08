@@ -92,6 +92,25 @@ Budgets still count the full amount of every expense, whoever paid.
 
 The math is in `src/domain/split.ts`. The two names are `PEOPLE` in `src/config.ts`.
 
-## Changing the currency
+## Income
 
-Edit `CURRENCY` in `src/config.ts` (for example `'EUR'` or `'COP'`).
+Money you receive (salary, a refund) is logged with **+ Add income** on the Month tab. It is not
+an expense: it raises the month's current, planned and projected balances.
+
+## Accounts and planned expenses
+
+The Accounts tab shows everything in one place: each account in its own currency, the expenses you
+are planning for but have not put in a month (counted as negative), and a total in your home
+currency. Nothing is predefined; you add, rename and delete accounts yourself.
+
+- Mark one account as the **Budget account**: its balance is not typed, it follows the current
+  balance of the month selected in the app.
+- Other balances are typed in by hand, and so are exchange rates ("1 CAD = how many COP?").
+  A currency without a rate is shown but left out of the total.
+
+The math is in `src/domain/accounts.ts`.
+
+## Changing the home currency
+
+Edit `CURRENCY` in `src/config.ts` (for example `'EUR'` or `'COP'`). The budget is in this currency
+and the Accounts total is converted to it.

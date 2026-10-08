@@ -27,6 +27,8 @@ export default function RootLayout() {
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="category/[id]" options={{ title: '', headerBackTitle: 'Back' }} />
           <Stack.Screen name="expense" options={{ presentation: 'modal', title: 'Expense' }} />
+          <Stack.Screen name="income" options={{ presentation: 'modal', title: 'Income' }} />
+          <Stack.Screen name="account-edit" options={{ presentation: 'modal', title: '' }} />
           <Stack.Screen name="plan" options={{ presentation: 'modal', title: 'Plan month' }} />
           <Stack.Screen name="category-edit" options={{ presentation: 'modal', title: 'Category' }} />
           <Stack.Screen name="balance" options={{ presentation: 'modal', title: 'Balance' }} />
