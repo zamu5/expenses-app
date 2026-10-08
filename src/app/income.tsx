@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Alert, StyleSheet, View } from 'react-native';
 
 import { DateField } from '@/components/date-field';
-import { ShareField } from '@/components/share-field';
+import { SplitBar } from '@/components/split-bar';
 import { ThemedText } from '@/components/themed-text';
 import { Button, Chips, Field, Screen, SectionLabel } from '@/components/ui';
 import { CURRENCY } from '@/config';
@@ -14,7 +14,7 @@ import { addIncome, deleteIncome, getIncome, updateIncome } from '@/db/repositor
 import type { Account, Category, Income } from '@/db/types';
 import { monthKeyOf, todayISO } from '@/domain/dates';
 import { centsToInputText, parseAmountToCents } from '@/domain/money';
-import { DEFAULT_OWNER_SHARE_PCT, parseSharePct, type ForWhom } from '@/domain/split';
+import { DEFAULT_OWNER_SHARE_PCT, refundOwnerShareCents, type ForWhom } from '@/domain/split';
 import { useDbQuery } from '@/hooks/use-db-query';
 import { useTheme } from '@/hooks/use-theme';
 import { confirmDestructive } from '@/lib/confirm';
@@ -75,8 +75,7 @@ function IncomeForm({
   );
   const [categoryId, setCategoryId] = useState<string | null>(income?.categoryId ?? null);
   const [forWhom, setForWhom] = useState<ForWhom>(income?.forWhom ?? 'sergio');
-  const [shareText, setShareText] = useState(String(income?.ownerSharePct ?? DEFAULT_OWNER_SHARE_PCT));
-  const sharePct = parseSharePct(shareText);
+  const [sharePct, setSharePct] = useState(income?.ownerSharePct ?? DEFAULT_OWNER_SHARE_PCT);
   // The split only matters for a refund that is shared.
   const usesShare = categoryId !== null && forWhom === 'shared';
   const [saving, setSaving] = useState(false);
@@ -91,7 +90,11 @@ function IncomeForm({
   }
 
   const amountCents = parseAmountToCents(amountText);
-  const canSave = amountCents !== null && amountCents > 0 && (!usesShare || sharePct !== null) && !saving;
+  const canSave = amountCents !== null && amountCents > 0 && !saving;
+  const refundOwnerCents =
+    amountCents && amountCents > 0
+      ? refundOwnerShareCents({ amountCents, forWhom: 'shared', ownerSharePct: sharePct })
+      : undefined;
 
   async function save() {
     if (!canSave) return;
@@ -103,7 +106,7 @@ function IncomeForm({
       accountId,
       categoryId,
       forWhom,
-      ownerSharePct: usesShare && sharePct !== null ? sharePct : undefined,
+      ownerSharePct: usesShare ? sharePct : undefined,
     };
     try {
       if (income) await updateIncome(db, income.id, input);
@@ -185,7 +188,17 @@ function IncomeForm({
             value={forWhom}
             onChange={setForWhom}
           />
-          {usesShare ? <ShareField value={shareText} onChange={setShareText} people={people} /> : null}
+          {usesShare ? (
+            <SplitBar
+              value={sharePct}
+              onChange={setSharePct}
+              people={people}
+              ownerCents={refundOwnerCents}
+              otherCents={
+                refundOwnerCents === undefined || !amountCents ? undefined : amountCents - refundOwnerCents
+              }
+            />
+          ) : null}
         </>
       ) : null}
 

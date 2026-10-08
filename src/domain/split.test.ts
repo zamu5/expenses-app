@@ -7,7 +7,6 @@ import {
   ownerShareCents,
   refundOwedToOtherCents,
   refundOwnerShareCents,
-  parseSharePct,
   shareCents,
   type SplitTotals,
 } from './split';
@@ -114,19 +113,6 @@ describe('a split other than half and half', () => {
     const refund = { amountCents: 1001, forWhom: 'shared', ownerSharePct: 60 } as const;
     expect(refundOwedToOtherCents(refund)).toBe(400);
     expect(refundOwnerShareCents(refund)).toBe(601);
-  });
-});
-
-describe('parseSharePct', () => {
-  it('accepts whole numbers from 0 to 100, with or without the sign', () => {
-    expect(parseSharePct('50')).toBe(50);
-    expect(parseSharePct(' 60% ')).toBe(60);
-    expect(parseSharePct('0')).toBe(0);
-    expect(parseSharePct('100')).toBe(100);
-  });
-
-  it('refuses anything else', () => {
-    for (const bad of ['', '101', '-5', '50.5', 'half', '1000']) expect(parseSharePct(bad)).toBeNull();
   });
 });
 

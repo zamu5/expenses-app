@@ -147,11 +147,3 @@ export function refundOwedToOtherCents(refund: SplitRefund): Cents {
 export function refundOwnerShareCents(refund: SplitRefund): Cents {
   return refund.amountCents - refundOwedToOtherCents(refund);
 }
-
-/** Cleans what was typed as the owner's share: a whole number from 0 to 100, or null. */
-export function parseSharePct(input: string): number | null {
-  const text = input.trim().replace(/%$/, '').trim();
-  if (!/^\d{1,3}$/.test(text)) return null;
-  const pct = Number(text);
-  return pct <= 100 ? pct : null;
-}

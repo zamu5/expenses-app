@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Alert, StyleSheet, View } from 'react-native';
 
 import { DateField } from '@/components/date-field';
-import { ShareField } from '@/components/share-field';
+import { SplitBar } from '@/components/split-bar';
 import { ThemedText } from '@/components/themed-text';
 import { Button, Chips, Field, Screen, SectionLabel } from '@/components/ui';
 import { CURRENCY } from '@/config';
@@ -23,7 +23,7 @@ import { centsToInputText, parseAmountToCents, splitOffPart } from '@/domain/mon
 import {
   BUDGET_OWNER,
   DEFAULT_OWNER_SHARE_PCT,
-  parseSharePct,
+  ownerShareCents,
   type ForWhom,
   type Person,
 } from '@/domain/split';
@@ -102,8 +102,7 @@ function ExpenseForm({
   const [forWhom, setForWhom] = useState<ForWhom>(expense?.forWhom ?? 'shared');
   // How a shared expense is divided: half and half unless changed here. An expense being edited
   // shows the split it was saved with.
-  const [shareText, setShareText] = useState(String(expense?.ownerSharePct ?? DEFAULT_OWNER_SHARE_PCT));
-  const sharePct = parseSharePct(shareText);
+  const [sharePct, setSharePct] = useState(expense?.ownerSharePct ?? DEFAULT_OWNER_SHARE_PCT);
   // A new expense starts on the default payment method, if one is set.
   const [paymentAccountId, setPaymentAccountId] = useState<string | null>(
     expense ? expense.paymentAccountId : (methods.find((m) => m.isPaymentDefault)?.id ?? null),
@@ -121,6 +120,11 @@ function ExpenseForm({
   const part =
     partOpen && amountCents !== null && partCents !== null ? splitOffPart(amountCents, partCents) : null;
   // With the split open, both its amount and its category must be valid before saving.
+  // What each side of the split comes to, for the labels on the bar, once an amount is typed.
+  const ownerCents =
+    amountCents && amountCents > 0
+      ? ownerShareCents({ amountCents, paidBy, forWhom: 'shared', ownerSharePct: sharePct })
+      : undefined;
   const usesShare = forWhom === 'shared' || (partOpen && (partForWhom ?? forWhom) === 'shared');
   const partReady = !partOpen || (part !== null && partCategoryId !== null && partCategoryId !== categoryId);
   const canSave =
@@ -128,8 +132,6 @@ function ExpenseForm({
     amountCents > 0 &&
     categoryId !== null &&
     partReady &&
-    // The split only matters, and is only shown, when something in this expense is shared.
-    (!usesShare || sharePct !== null) &&
     !saving;
 
   // The picker offers the categories in the plan of the month the expense falls in,
@@ -158,7 +160,7 @@ function ExpenseForm({
       // Only the owner's own accounts and cards are tracked.
       paymentAccountId: paidBy === BUDGET_OWNER ? paymentAccountId : null,
       // Left out when nothing is shared, so an edited expense keeps the split it had.
-      ownerSharePct: usesShare && sharePct !== null ? sharePct : undefined,
+      ownerSharePct: usesShare ? sharePct : undefined,
     };
     try {
       if (part && partCategoryId) {
@@ -285,7 +287,15 @@ function ExpenseForm({
 
       <SectionLabel>For</SectionLabel>
       <Chips options={FOR_WHOM} value={forWhom} onChange={setForWhom} />
-      {usesShare ? <ShareField value={shareText} onChange={setShareText} people={people} /> : null}
+      {usesShare ? (
+        <SplitBar
+          value={sharePct}
+          onChange={setSharePct}
+          people={people}
+          ownerCents={ownerCents}
+          otherCents={ownerCents === undefined || !amountCents ? undefined : amountCents - ownerCents}
+        />
+      ) : null}
 
       <SectionLabel>Date</SectionLabel>
       <DateField value={spentOn} onChange={setSpentOn} />
