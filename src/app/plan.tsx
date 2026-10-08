@@ -197,7 +197,7 @@ function PlanForm({
           />
           {typedStart === null ? (
             <ThemedText type="small" style={{ color: theme.critical }}>
-              Enter an amount like 12197.15
+              Enter an amount like 1500.00
             </ThemedText>
           ) : (
             <ThemedText type="small" themeColor="textSecondary">
