@@ -1,3 +1,4 @@
+import { BUDGET_OWNER } from '@/domain/split';
 import { newId, nowISO } from '@/lib/id';
 
 import { notifyDataChanged } from '../events';
@@ -11,6 +12,8 @@ interface AccountRow {
   balance_cents: number;
   include_in_start: number;
   is_income_default: number;
+  linked_account_id: string | null;
+  is_payment_default: number;
   balance_updated_on: string;
 }
 
@@ -22,11 +25,13 @@ const toAccount = (r: AccountRow): Account => ({
   balanceCents: r.balance_cents,
   includeInStart: r.include_in_start === 1,
   isIncomeDefault: r.is_income_default === 1,
+  linkedAccountId: r.linked_account_id,
+  isPaymentDefault: r.is_payment_default === 1,
   balanceUpdatedOn: r.balance_updated_on,
 });
 
 const COLUMNS =
-  'id, name, kind, currency, balance_cents, include_in_start, is_income_default, balance_updated_on';
+  'id, name, kind, currency, balance_cents, include_in_start, is_income_default, linked_account_id, is_payment_default, balance_updated_on';
 
 /** Accounts first, then planned expenses, each in the order they were added. */
 export async function listAccounts(db: Db): Promise<Account[]> {
@@ -55,14 +60,23 @@ export interface AccountInput {
   includeInStart?: boolean;
   /** Pre-select this account when logging an income. Turning it on turns it off elsewhere. */
   isIncomeDefault?: boolean;
+  /** Makes it a credit card paid from that account. Its balance should then be negative. */
+  linkedAccountId?: string | null;
+  /** Pre-select it as "Paid with" on new expenses. Turning it on turns it off elsewhere. */
+  isPaymentDefault?: boolean;
   /** Day the balance was typed, 'YYYY-MM-DD'. */
   balanceUpdatedOn: string;
 }
 
-/** Only one account is the default for income, so marking one unmarks the others. */
-async function keepOneIncomeDefault(db: Db, id: string, now: string): Promise<void> {
+/** Only one account holds each default, so marking one unmarks the others. */
+async function keepOneDefault(
+  db: Db,
+  column: 'is_income_default' | 'is_payment_default',
+  id: string,
+  now: string,
+): Promise<void> {
   await db.runAsync(
-    'UPDATE accounts SET is_income_default = 0, updated_at = ? WHERE is_income_default = 1 AND id <> ?',
+    `UPDATE accounts SET ${column} = 0, updated_at = ? WHERE ${column} = 1 AND id <> ?`,
     [now, id],
   );
 }
@@ -70,13 +84,22 @@ async function keepOneIncomeDefault(db: Db, id: string, now: string): Promise<vo
 export async function createAccount(db: Db, input: AccountInput): Promise<string> {
   const id = newId();
   const now = nowISO();
-  const isIncomeDefault = input.kind === 'account' && input.isIncomeDefault === true;
+  const isAccount = input.kind === 'account';
+  const linkedAccountId = isAccount ? (input.linkedAccountId ?? null) : null;
+  const isIncomeDefault = isAccount && linkedAccountId === null && input.isIncomeDefault === true;
+  const isPaymentDefault = isAccount && input.isPaymentDefault === true;
   await db.withTransactionAsync(async () => {
+    const firstCard =
+      linkedAccountId !== null &&
+      (await db.getFirstAsync<{ id: string }>(
+        'SELECT id FROM accounts WHERE linked_account_id IS NOT NULL AND deleted_at IS NULL LIMIT 1',
+        [],
+      )) === null;
     await db.runAsync(
       `INSERT INTO accounts
          (id, name, kind, currency, balance_cents, include_in_start, is_income_default,
-          balance_updated_on, sort_order, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), -1) + 1 FROM accounts), ?, ?)`,
+          linked_account_id, is_payment_default, balance_updated_on, sort_order, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), -1) + 1 FROM accounts), ?, ?)`,
       [
         id,
         input.name.trim(),
@@ -85,12 +108,23 @@ export async function createAccount(db: Db, input: AccountInput): Promise<string
         input.balanceCents,
         (input.includeInStart ?? true) ? 1 : 0,
         isIncomeDefault ? 1 : 0,
+        linkedAccountId,
+        isPaymentDefault ? 1 : 0,
         input.balanceUpdatedOn,
         now,
         now,
       ],
     );
-    if (isIncomeDefault) await keepOneIncomeDefault(db, id, now);
+    if (isIncomeDefault) await keepOneDefault(db, 'is_income_default', id, now);
+    if (isPaymentDefault) await keepOneDefault(db, 'is_payment_default', id, now);
+    // Expenses logged before cards existed are taken to have been paid with the first card.
+    // They are only tagged: the balance typed for the card already includes them.
+    if (firstCard) {
+      await db.runAsync(
+        'UPDATE expenses SET payment_account_id = ?, updated_at = ? WHERE payment_account_id IS NULL AND paid_by = ?',
+        [id, now, BUDGET_OWNER],
+      );
+    }
   });
   notifyDataChanged();
   return id;
@@ -98,11 +132,15 @@ export async function createAccount(db: Db, input: AccountInput): Promise<string
 
 export async function updateAccount(db: Db, id: string, input: AccountInput): Promise<void> {
   const now = nowISO();
-  const isIncomeDefault = input.kind === 'account' && input.isIncomeDefault === true;
+  const isAccount = input.kind === 'account';
+  const linkedAccountId = isAccount ? (input.linkedAccountId ?? null) : null;
+  const isIncomeDefault = isAccount && linkedAccountId === null && input.isIncomeDefault === true;
+  const isPaymentDefault = isAccount && input.isPaymentDefault === true;
   await db.withTransactionAsync(async () => {
     await db.runAsync(
       `UPDATE accounts SET name = ?, currency = ?, balance_cents = ?, include_in_start = ?,
-         is_income_default = ?, balance_updated_on = ?, updated_at = ?
+         is_income_default = ?, linked_account_id = ?, is_payment_default = ?,
+         balance_updated_on = ?, updated_at = ?
        WHERE id = ?`,
       [
         input.name.trim(),
@@ -110,12 +148,38 @@ export async function updateAccount(db: Db, id: string, input: AccountInput): Pr
         input.balanceCents,
         (input.includeInStart ?? true) ? 1 : 0,
         isIncomeDefault ? 1 : 0,
+        linkedAccountId,
+        isPaymentDefault ? 1 : 0,
         input.balanceUpdatedOn,
         now,
         id,
       ],
     );
-    if (isIncomeDefault) await keepOneIncomeDefault(db, id, now);
+    if (isIncomeDefault) await keepOneDefault(db, 'is_income_default', id, now);
+    if (isPaymentDefault) await keepOneDefault(db, 'is_payment_default', id, now);
+  });
+  notifyDataChanged();
+}
+
+/**
+ * Pays a credit card from the bank account it is linked to: the account goes down and the debt
+ * on the card goes down by the same amount. Nothing else changes; it is not an expense.
+ */
+export async function payCard(db: Db, cardId: string, amountCents: number): Promise<void> {
+  const now = nowISO();
+  await db.withTransactionAsync(async () => {
+    const card = await getAccount(db, cardId);
+    if (!card?.linkedAccountId) throw new Error('This is not a credit card linked to an account');
+    await db.runAsync('UPDATE accounts SET balance_cents = balance_cents + ?, updated_at = ? WHERE id = ?', [
+      amountCents,
+      now,
+      cardId,
+    ]);
+    await db.runAsync('UPDATE accounts SET balance_cents = balance_cents - ?, updated_at = ? WHERE id = ?', [
+      amountCents,
+      now,
+      card.linkedAccountId,
+    ]);
   });
   notifyDataChanged();
 }

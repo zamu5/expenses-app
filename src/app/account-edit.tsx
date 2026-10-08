@@ -11,6 +11,7 @@ import {
   deleteAccount,
   getAccount,
   listAccounts,
+  payCard,
   updateAccount,
 } from '@/db/repositories/accounts';
 import type { Account, AccountKind } from '@/db/types';
@@ -31,7 +32,17 @@ export default function AccountEditScreen() {
       const currencies = [...new Set([CURRENCY, ...all.map((a) => a.currency)])];
       // The default for income belongs to one account; the others do not offer the switch.
       const incomeDefault = all.find((a) => a.isIncomeDefault && a.id !== id) ?? null;
-      return { account, currencies, incomeDefaultName: incomeDefault?.name ?? null };
+      const paymentDefault = all.find((a) => a.isPaymentDefault && a.id !== id) ?? null;
+      return {
+        account,
+        currencies,
+        incomeDefaultName: incomeDefault?.name ?? null,
+        paymentDefaultName: paymentDefault?.name ?? null,
+        // A credit card is paid from a bank account in the home currency (not from another card).
+        banks: all.filter(
+          (a) => a.kind === 'account' && a.linkedAccountId === null && a.currency === CURRENCY && a.id !== id,
+        ),
+      };
     },
     [id],
   );
@@ -42,6 +53,8 @@ export default function AccountEditScreen() {
       kind={data.account?.kind ?? (kind === 'planned' ? 'planned' : 'account')}
       currencies={data.currencies}
       incomeDefaultName={data.incomeDefaultName}
+      paymentDefaultName={data.paymentDefaultName}
+      banks={data.banks}
     />
   );
 }
@@ -51,12 +64,18 @@ function AccountForm({
   kind,
   currencies,
   incomeDefaultName,
+  paymentDefaultName,
+  banks,
 }: {
   account: Account | null;
   kind: AccountKind;
   currencies: string[];
   /** Name of the other account that is already the default for income, if any. */
   incomeDefaultName: string | null;
+  /** The same for the default payment method. */
+  paymentDefaultName: string | null;
+  /** Bank accounts a credit card can be paid from. */
+  banks: Account[];
 }) {
   const db = useSQLiteContext();
   const theme = useTheme();
@@ -64,13 +83,27 @@ function AccountForm({
 
   const [name, setName] = useState(account?.name ?? '');
   const [currencyText, setCurrencyText] = useState(account?.currency ?? CURRENCY);
-  const [balanceText, setBalanceText] = useState(account ? centsToInputText(account.balanceCents) : '');
+  // A credit card is an account linked to the bank account it is paid from. What is owed on it
+  // is typed as a positive amount and stored as a negative balance.
+  const [linkedAccountId, setLinkedAccountId] = useState<string | null>(account?.linkedAccountId ?? null);
+  const [isCard, setIsCard] = useState(account ? account.linkedAccountId !== null : false);
+  const [balanceText, setBalanceText] = useState(
+    account ? centsToInputText(Math.abs(account.balanceCents)) : '',
+  );
+  const [isPaymentDefault, setIsPaymentDefault] = useState(account?.isPaymentDefault ?? false);
+  const [payText, setPayText] = useState('');
   const [includeInStart, setIncludeInStart] = useState(account?.includeInStart ?? true);
   const [isIncomeDefault, setIsIncomeDefault] = useState(account?.isIncomeDefault ?? false);
 
   const currency = parseCurrencyCode(currencyText);
-  const balanceCents = balanceText.trim() === '' ? 0 : parseAmountToCents(balanceText);
-  const canSave = name.trim() !== '' && currency !== null && balanceCents !== null;
+  const typedCents = balanceText.trim() === '' ? 0 : parseAmountToCents(balanceText);
+  // An existing account keeps its sign unless it is (or becomes) a card, which is always owed.
+  const wasNegative = !isCard && account !== null && account.linkedAccountId === null && account.balanceCents < 0;
+  const balanceCents = typedCents === null ? null : isCard || wasNegative ? -typedCents || 0 : typedCents;
+  const linked = isCard ? banks.find((b) => b.id === linkedAccountId) : undefined;
+  const canSave =
+    name.trim() !== '' && currency !== null && balanceCents !== null && (!isCard || linked !== undefined);
+  const payCents = parseAmountToCents(payText);
 
   async function save() {
     if (!canSave) return;
@@ -81,7 +114,9 @@ function AccountForm({
       balanceCents,
       includeInStart,
       // Never claim the default while another account holds it.
-      isIncomeDefault: incomeDefaultName === null && currency === CURRENCY && isIncomeDefault,
+      isIncomeDefault: incomeDefaultName === null && currency === CURRENCY && !isCard && isIncomeDefault,
+      linkedAccountId: isCard ? linkedAccountId : null,
+      isPaymentDefault: paymentDefaultName === null && currency === CURRENCY && isPaymentDefault,
       // Keep the "updated" day unless the balance itself changed.
       balanceUpdatedOn:
         account && account.balanceCents === balanceCents ? account.balanceUpdatedOn : todayISO(),
@@ -103,10 +138,20 @@ function AccountForm({
     });
   }
 
-  const noun = isPlanned ? 'planned expense' : 'account';
+  async function pay() {
+    if (!account || payCents === null || payCents <= 0) return;
+    try {
+      await payCard(db, account.id, payCents);
+      router.back();
+    } catch (e) {
+      Alert.alert('Could not save', e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  const noun = isPlanned ? 'planned expense' : isCard ? 'credit card' : 'account';
   return (
     <Screen>
-      <Stack.Screen options={{ title: isPlanned ? 'Planned expense' : 'Account' }} />
+      <Stack.Screen options={{ title: isPlanned ? 'Planned expense' : isCard ? 'Credit card' : 'Account' }} />
       <Field
         label="Name"
         value={name}
@@ -115,9 +160,37 @@ function AccountForm({
         autoFocus={!account}
       />
 
+      {/* A card needs a bank account in the home currency to be paid from. */}
+      {!isPlanned && (isCard || banks.length > 0) ? (
+        <ToggleRow
+          label="This is a credit card"
+          hint="What you spend with it is owed, and it is paid from one of your bank accounts."
+          value={isCard}
+          onValueChange={(value) => {
+            setIsCard(value);
+            if (value) setCurrencyText(CURRENCY);
+          }}
+        />
+      ) : null}
+      {isCard ? (
+        <>
+          <SectionLabel>Paid from</SectionLabel>
+          <Chips
+            options={banks.map((b) => ({ value: b.id, label: b.name }))}
+            value={linkedAccountId}
+            onChange={setLinkedAccountId}
+          />
+          {linked === undefined ? (
+            <ThemedText type="small" style={{ color: theme.critical }}>
+              Pick the bank account this card is paid from.
+            </ThemedText>
+          ) : null}
+        </>
+      ) : null}
+
       <SectionLabel>Currency</SectionLabel>
       <Chips
-        options={currencies.map((c) => ({ value: c, label: c }))}
+        options={(isCard ? [CURRENCY] : currencies).map((c) => ({ value: c, label: c }))}
         value={currency}
         onChange={setCurrencyText}
       />
@@ -137,7 +210,9 @@ function AccountForm({
       ) : null}
 
       <Field
-        label={isPlanned ? 'How much you expect to spend' : 'Current balance'}
+        label={
+          isPlanned ? 'How much you expect to spend' : isCard ? 'What you owe on it now' : 'Current balance'
+        }
         value={balanceText}
         onChangeText={setBalanceText}
         keyboardType="decimal-pad"
@@ -159,7 +234,7 @@ function AccountForm({
         />
       ) : null}
       {/* Income is typed in the home currency, so only an account in it can receive income. */}
-      {isPlanned || currency !== CURRENCY ? null : incomeDefaultName === null ? (
+      {isPlanned || isCard || currency !== CURRENCY ? null : incomeDefaultName === null ? (
         <ToggleRow
           label="Default account for income"
           hint="Pre-selected when you log an income or a refund. Only one account can be the default."
@@ -172,6 +247,42 @@ function AccountForm({
           first.
         </ThemedText>
       )}
+
+      {isPlanned || currency !== CURRENCY ? null : paymentDefaultName === null ? (
+        <ToggleRow
+          label="Default payment method"
+          hint={'Pre-selected as "Paid with" when you log an expense. Only one can be the default.'}
+          value={isPaymentDefault}
+          onValueChange={setIsPaymentDefault}
+        />
+      ) : (
+        <ThemedText type="small" themeColor="textSecondary">
+          {paymentDefaultName} is the default payment method. To change it, switch it off there first.
+        </ThemedText>
+      )}
+
+      {account && account.linkedAccountId && linked ? (
+        <View style={{ gap: 8 }}>
+          <SectionLabel>Pay this card</SectionLabel>
+          <Field
+            label={`Amount paid from ${linked.name}`}
+            value={payText}
+            onChangeText={setPayText}
+            keyboardType="decimal-pad"
+            placeholder={centsToInputText(Math.abs(account.balanceCents))}
+          />
+          <ThemedText type="small" themeColor="textSecondary">
+            Takes the amount out of {linked.name} and off what you owe on the card. It is not an
+            expense.
+          </ThemedText>
+          <Button
+            title="Record card payment"
+            variant="secondary"
+            onPress={pay}
+            disabled={payCents === null || payCents <= 0}
+          />
+        </View>
+      ) : null}
 
       <View style={{ gap: 8, marginTop: 8 }}>
         <Button title={account ? 'Save changes' : `Add ${noun}`} onPress={save} disabled={!canSave} />

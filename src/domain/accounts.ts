@@ -90,9 +90,9 @@ export function computeStartedWith(
 }
 
 /**
- * Money paid into the accounts during the month (income and refunds), which is already inside
- * their balances. Taking it off gives what the month really started with, so income is not
- * counted twice: once in the balance and once as income.
+ * Money that moved through the accounts during the month and is already inside their balances:
+ * income and refunds paid in, or (called with expenses) payments taken out. Undoing it gives what
+ * the month really started with, so nothing is counted twice.
  */
 export function depositsIntoStartCents(
   deposits: { accountId: string | null; amountCents: Cents }[],

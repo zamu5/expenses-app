@@ -1,5 +1,6 @@
 import { CURRENCY } from '@/config';
 import { listAccounts, listExchangeRates } from '@/db/repositories/accounts';
+import { listExpenses } from '@/db/repositories/expenses';
 import { listIncomes } from '@/db/repositories/incomes';
 import { getSplitTotals } from '@/db/repositories/settlements';
 import type { Account, Db, ExchangeRate } from '@/db/types';
@@ -34,8 +35,9 @@ export interface Overview {
    */
   startedWith: NetWorth;
   /**
-   * `startedWith` minus the income and refunds paid into those accounts this month. That money is
-   * already in the balances, and the month counts it separately as income.
+   * `startedWith` with this month's movements undone: minus the income and refunds paid into those
+   * accounts, plus the expenses paid from them. Both are already in the balances, and the month
+   * counts them separately.
    */
   startedWithCents: number;
 }
@@ -46,16 +48,23 @@ export interface Overview {
  * people owe each other, and what is left to spend this month.
  */
 export async function loadOverview(db: Db, monthKey: MonthKey): Promise<Overview> {
-  const [accounts, rates, splitTotals, incomes] = await Promise.all([
+  const [accounts, rates, splitTotals, incomes, expenses] = await Promise.all([
     listAccounts(db),
     listExchangeRates(db),
     getSplitTotals(db),
     listIncomes(db, monthKey),
+    listExpenses(db, monthKey),
   ]);
   const rateOf = Object.fromEntries(rates.map((r) => [r.currency, r.unitsPerHome]));
 
   const startedWith = computeStartedWith(accounts, rateOf, CURRENCY);
-  const startedWithCents = startedWith.totalHomeCents - depositsIntoStartCents(incomes, accounts);
+  // The balances already hold this month's income and payments; undo both to get the start.
+  const paidCents = depositsIntoStartCents(
+    expenses.map((e) => ({ accountId: e.paymentAccountId, amountCents: e.amountCents })),
+    accounts,
+  );
+  const startedWithCents =
+    startedWith.totalHomeCents - depositsIntoStartCents(incomes, accounts) + paidCents;
   const monthView = await loadMonthView(db, monthKey, startedWithCents);
 
   const leftCents = monthView.month ? leftToSpendCents(monthView.summary.categories) : 0;

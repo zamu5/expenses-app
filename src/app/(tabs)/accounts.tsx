@@ -77,7 +77,9 @@ export default function AccountsScreen() {
       <AccountList
         accounts={accounts}
         hint={(a) =>
-          `Updated ${formatDay(a.balanceUpdatedOn)}${a.includeInStart ? '' : ' · not in starting balance'}`
+          a.linkedAccountId
+            ? `Credit card · paid from ${accounts.find((b) => b.id === a.linkedAccountId)?.name ?? 'an account'}`
+            : `Updated ${formatDay(a.balanceUpdatedOn)}${a.includeInStart ? '' : ' · not in starting balance'}`
         }
       />
       <Card style={{ gap: 0, paddingVertical: 4 }}>

@@ -179,12 +179,24 @@ const migrations: ((db: Db) => Promise<void>)[] = [
       ALTER TABLE accounts ADD COLUMN is_income_default INTEGER NOT NULL DEFAULT 0;
     `);
   },
+
+  // Version 9: credit cards, and what each expense was paid with.
+  async (db) => {
+    await db.execAsync(`
+      -- An account with a linked account is a credit card, paid from that account.
+      -- Its balance is negative: what is owed on it.
+      ALTER TABLE accounts ADD COLUMN linked_account_id TEXT REFERENCES accounts(id);
+      ALTER TABLE accounts ADD COLUMN is_payment_default INTEGER NOT NULL DEFAULT 0;
+
+      -- NULL when it was not paid from one of the owner's accounts, or was logged before this.
+      ALTER TABLE expenses ADD COLUMN payment_account_id TEXT REFERENCES accounts(id);
+    `);
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = migrations.length;
 
-/** `upTo` stops at an older schema version; only tests use it, to check an upgrade. */
-export async function migrate(db: Db, upTo: number = migrations.length): Promise<void> {
+async function runMigrations(db: Db, upTo: number): Promise<void> {
   // WAL makes reads and writes not block each other; foreign keys are off by default in SQLite.
   await db.execAsync('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
 
@@ -199,4 +211,21 @@ export async function migrate(db: Db, upTo: number = migrations.length): Promise
     });
     version = next;
   }
+}
+
+// Kept on globalThis so it survives a development hot reload, which loads this file again.
+const lock = globalThis as { __expensesMigration?: Promise<void> };
+
+/**
+ * Brings the database up to date. Calls never overlap: a second one waits for the first. Two
+ * migrations running at once on the same connection would share one transaction, and one could
+ * roll back the other half way. It happens in development, when a hot reload mounts the database
+ * provider again while the first run is still going.
+ * `upTo` stops at an older schema version; only tests use it, to check an upgrade.
+ */
+export function migrate(db: Db, upTo: number = migrations.length): Promise<void> {
+  const previous = lock.__expensesMigration ?? Promise.resolve();
+  const run = previous.catch(() => undefined).then(() => runMigrations(db, upTo));
+  lock.__expensesMigration = run;
+  return run;
 }

@@ -33,7 +33,10 @@ export default function IncomeScreen() {
         income,
         categories,
         // The amount is in the home currency, so it can only be added to an account in it.
-        accounts: accounts.filter((a) => a.kind === 'account' && a.currency === CURRENCY),
+        // Credit cards are left out: income is not paid into a card.
+        accounts: accounts.filter(
+          (a) => a.kind === 'account' && a.currency === CURRENCY && a.linkedAccountId === null,
+        ),
       };
     },
     [id],

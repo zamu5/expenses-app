@@ -6,7 +6,8 @@ import { Alert, StyleSheet, View } from 'react-native';
 import { DateField } from '@/components/date-field';
 import { ThemedText } from '@/components/themed-text';
 import { Button, Chips, Field, Screen, SectionLabel } from '@/components/ui';
-import { PEOPLE } from '@/config';
+import { CURRENCY, PEOPLE } from '@/config';
+import { listAccounts } from '@/db/repositories/accounts';
 import { listCategories, listCategoriesForMonth } from '@/db/repositories/categories';
 import {
   addExpense,
@@ -15,14 +16,16 @@ import {
   saveExpenseWithPart,
   updateExpense,
 } from '@/db/repositories/expenses';
-import type { Category, Expense } from '@/db/types';
+import type { Account, Category, Expense } from '@/db/types';
 import { monthKeyOf, todayISO } from '@/domain/dates';
 import { centsToInputText, parseAmountToCents, splitOffPart } from '@/domain/money';
-import type { ForWhom, Person } from '@/domain/split';
+import { BUDGET_OWNER, type ForWhom, type Person } from '@/domain/split';
 import { useDbQuery } from '@/hooks/use-db-query';
 import { useTheme } from '@/hooks/use-theme';
 import { confirmDestructive } from '@/lib/confirm';
 import { useUiStore } from '@/store/ui';
+
+const NO_METHOD = 'none';
 
 const FOR_WHOM_OPTIONS: { value: ForWhom; label: string }[] = [
   { value: 'shared', label: 'Shared 50/50' },
@@ -37,6 +40,8 @@ export default function ExpenseScreen() {
     async (db) => ({
       categories: await listCategories(db, { includeArchived: true }),
       expense: id ? await getExpense(db, id) : null,
+      // What an expense can be paid with: bank accounts and credit cards in the home currency.
+      methods: (await listAccounts(db)).filter((a) => a.kind === 'account' && a.currency === CURRENCY),
     }),
     [id],
   );
@@ -47,6 +52,7 @@ export default function ExpenseScreen() {
     <ExpenseForm
       categories={data.categories}
       expense={data.expense}
+      methods={data.methods}
       initialCategoryId={categoryId}
     />
   );
@@ -55,10 +61,12 @@ export default function ExpenseScreen() {
 function ExpenseForm({
   categories,
   expense,
+  methods,
   initialCategoryId,
 }: {
   categories: Category[];
   expense: Expense | null;
+  methods: Account[];
   initialCategoryId?: string;
 }) {
   const db = useSQLiteContext();
@@ -79,6 +87,10 @@ function ExpenseForm({
   const [note, setNote] = useState(expense?.note ?? '');
   const [paidBy, setPaidBy] = useState<Person>(expense?.paidBy ?? lastPaidBy);
   const [forWhom, setForWhom] = useState<ForWhom>(expense?.forWhom ?? 'shared');
+  // A new expense starts on the default payment method, if one is set.
+  const [paymentAccountId, setPaymentAccountId] = useState<string | null>(
+    expense ? expense.paymentAccountId : (methods.find((m) => m.isPaymentDefault)?.id ?? null),
+  );
   const [saving, setSaving] = useState(false);
   // Part of this purchase that belongs to another category (clothes on a groceries receipt).
   const [partOpen, setPartOpen] = useState(false);
@@ -112,7 +124,16 @@ function ExpenseForm({
   async function save() {
     if (!canSave) return;
     setSaving(true);
-    const input = { categoryId, amountCents, spentOn, note, paidBy, forWhom };
+    const input = {
+      categoryId,
+      amountCents,
+      spentOn,
+      note,
+      paidBy,
+      forWhom,
+      // Only the owner's own accounts and cards are tracked.
+      paymentAccountId: paidBy === BUDGET_OWNER ? paymentAccountId : null,
+    };
     try {
       if (part && partCategoryId) {
         await saveExpenseWithPart(db, expense?.id ?? null, input, {
@@ -217,6 +238,20 @@ function ExpenseForm({
         value={paidBy}
         onChange={setPaidBy}
       />
+
+      {paidBy === BUDGET_OWNER && methods.length > 0 ? (
+        <>
+          <SectionLabel>Paid with</SectionLabel>
+          <Chips
+            options={[
+              ...methods.map((m) => ({ value: m.id, label: m.linkedAccountId ? `${m.name} (card)` : m.name })),
+              { value: NO_METHOD, label: 'Not tracked' },
+            ]}
+            value={paymentAccountId ?? NO_METHOD}
+            onChange={(value) => setPaymentAccountId(value === NO_METHOD ? null : value)}
+          />
+        </>
+      ) : null}
 
       <SectionLabel>For</SectionLabel>
       <Chips

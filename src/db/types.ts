@@ -41,6 +41,8 @@ export interface Expense {
   note: string | null;
   paidBy: Person;
   forWhom: ForWhom;
+  /** The account or credit card it was paid with, whose balance it lowered. Null when not tracked. */
+  paymentAccountId: string | null;
 }
 
 /** Money received: a salary, a refund. It raises the month's balance; it is not a negative expense. */
@@ -77,6 +79,13 @@ export interface Account {
   includeInStart: boolean;
   /** The account pre-selected when logging an income. At most one. */
   isIncomeDefault: boolean;
+  /**
+   * Set on a credit card: the bank account it is paid from. A card's balance is negative,
+   * because it is money owed.
+   */
+  linkedAccountId: string | null;
+  /** The account or card pre-selected as "Paid with" on a new expense. At most one. */
+  isPaymentDefault: boolean;
   /** Day the balance was last typed in. */
   balanceUpdatedOn: string;
 }

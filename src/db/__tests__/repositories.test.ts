@@ -13,6 +13,7 @@ import {
   deleteAccount,
   listAccounts,
   listExchangeRates,
+  payCard,
   setExchangeRate,
   updateAccount,
 } from '../repositories/accounts';
@@ -689,5 +690,114 @@ describe('income goes into an account', () => {
 
     expect((await listIncomes(db, '2026-10'))[0]).toMatchObject({ accountId: main, categoryId: groceries, forWhom: 'shared' });
     expect((await listAccounts(db))[0]).toMatchObject({ balanceCents: 104000, isIncomeDefault: true });
+  });
+});
+
+describe('credit cards and what an expense was paid with', () => {
+  const bank = (name: string, balanceCents: number) =>
+    createAccount(db, { name, kind: 'account', currency: 'CAD', balanceCents, balanceUpdatedOn: '2026-10-01' });
+  const card = (name: string, owedCents: number, linkedAccountId: string, extra = {}) =>
+    createAccount(db, { name, kind: 'account', currency: 'CAD', balanceCents: -owedCents, linkedAccountId, balanceUpdatedOn: '2026-10-01', ...extra });
+  const balances = async () => Object.fromEntries((await listAccounts(db)).map((a) => [a.name, a.balanceCents]));
+  const total = async () => computeNetWorth(await listAccounts(db), {}, 'CAD').totalHomeCents;
+
+  it('a card expense grows the debt by the full amount, and follows edits and deletes', async () => {
+    const fun = await idOf('Fun');
+    const chequing = await bank('Chequing', 200000);
+    const visa = await card('Visa', 30000, chequing);
+    expect(await total()).toBe(170000);
+
+    // Shared, but the card is charged all of it; the other half is in what Adriana owes.
+    const id = await addExpense(db, { categoryId: fun, amountCents: 8334, spentOn: '2026-10-05', paidBy: 'sergio', forWhom: 'shared', paymentAccountId: visa });
+    expect(await balances()).toEqual({ Chequing: 200000, Visa: -38334 });
+
+    await updateExpense(db, id, { categoryId: fun, amountCents: 10000, spentOn: '2026-10-05', paidBy: 'sergio', forWhom: 'shared', paymentAccountId: visa });
+    expect((await balances()).Visa).toBe(-40000);
+
+    // Paid from the bank account instead: the card gets it back, the account pays.
+    await updateExpense(db, id, { categoryId: fun, amountCents: 10000, spentOn: '2026-10-05', paidBy: 'sergio', forWhom: 'shared', paymentAccountId: chequing });
+    expect(await balances()).toEqual({ Chequing: 190000, Visa: -30000 });
+
+    await deleteExpense(db, id);
+    expect(await balances()).toEqual({ Chequing: 200000, Visa: -30000 });
+  });
+
+  it('an expense the other person paid, or one that is not tracked, moves nothing', async () => {
+    const fun = await idOf('Fun');
+    const chequing = await bank('Chequing', 200000);
+    await card('Visa', 0, chequing);
+    await addExpense(db, { categoryId: fun, amountCents: 5000, spentOn: '2026-10-05', paidBy: 'adriana', forWhom: 'shared' });
+    await addExpense(db, { categoryId: fun, amountCents: 5000, spentOn: '2026-10-05', paidBy: 'sergio', forWhom: 'sergio' });
+    expect(await balances()).toEqual({ Chequing: 200000, Visa: 0 });
+  });
+
+  it('both parts of a split are charged to the same card', async () => {
+    const [groceries, fun] = await Promise.all(['Groceries', 'Fun'].map(idOf));
+    const chequing = await bank('Chequing', 200000);
+    const visa = await card('Visa', 0, chequing);
+    await saveExpenseWithPart(
+      db,
+      null,
+      { categoryId: groceries, amountCents: 20000, spentOn: '2026-10-05', paymentAccountId: visa },
+      { categoryId: fun, amountCents: 5000 },
+    );
+    expect((await balances()).Visa).toBe(-20000);
+    expect((await listExpenses(db, '2026-10')).every((e) => e.paymentAccountId === visa)).toBe(true);
+  });
+
+  it('paying the card moves money from its account and leaves the total alone', async () => {
+    const chequing = await bank('Chequing', 200000);
+    const visa = await card('Visa', 30000, chequing);
+    const before = await total();
+    await payCard(db, visa, 25000);
+    expect(await balances()).toEqual({ Chequing: 175000, Visa: -5000 });
+    expect(await total()).toBe(before);
+    await expect(payCard(db, chequing, 100)).rejects.toThrow(/not a credit card/);
+  });
+
+  it('the first card takes the expenses logged before it, without changing its balance', async () => {
+    const fun = await idOf('Fun');
+    const mine = await addExpense(db, { categoryId: fun, amountCents: 5000, spentOn: '2026-10-02', paidBy: 'sergio' });
+    const hers = await addExpense(db, { categoryId: fun, amountCents: 7000, spentOn: '2026-10-03', paidBy: 'adriana' });
+    const chequing = await bank('Chequing', 200000);
+    const visa = await card('Visa', 30000, chequing);
+
+    const byId = Object.fromEntries((await listExpenses(db, '2026-10')).map((e) => [e.id, e.paymentAccountId]));
+    expect(byId[mine]).toBe(visa);
+    expect(byId[hers]).toBeNull();
+    expect((await balances()).Visa).toBe(-30000);
+
+    // A second card does not take anything over.
+    const later = await addExpense(db, { categoryId: fun, amountCents: 100, spentOn: '2026-10-04', paidBy: 'sergio' });
+    await card('Second', 0, chequing);
+    expect((await listExpenses(db, '2026-10')).find((e) => e.id === later)?.paymentAccountId).toBeNull();
+  });
+
+  it('keeps one default payment method, and a card is never the default for income', async () => {
+    const chequing = await bank('Chequing', 0);
+    const visa = await card('Visa', 0, chequing, { isPaymentDefault: true, isIncomeDefault: true });
+    await card('Other', 0, chequing, { isPaymentDefault: true });
+    const all = await listAccounts(db);
+    expect(all.filter((a) => a.isPaymentDefault).map((a) => a.name)).toEqual(['Other']);
+    expect(all.find((a) => a.id === visa)?.isIncomeDefault).toBe(false);
+  });
+
+  it('survives a backup and restore, whatever order the card and its account come in', async () => {
+    const fun = await idOf('Fun');
+    const chequing = await bank('Chequing', 200000);
+    const visa = await card('Visa', 30000, chequing, { isPaymentDefault: true });
+    await addExpense(db, { categoryId: fun, amountCents: 5000, spentOn: '2026-10-05', paymentAccountId: visa });
+
+    const parsed = parseBackup(JSON.stringify(await exportBackup(db)), LATEST_SCHEMA_VERSION);
+    if (!parsed.ok) throw new Error(parsed.error);
+    // Put the card before the account it points at.
+    parsed.backup.tables.accounts.reverse();
+    db = createTestDb();
+    await migrate(db);
+    await restoreBackup(db, parsed.backup);
+
+    expect(await balances()).toEqual({ Chequing: 200000, Visa: -35000 });
+    expect((await listAccounts(db)).find((a) => a.name === 'Visa')).toMatchObject({ linkedAccountId: chequing, isPaymentDefault: true });
+    expect((await listExpenses(db, '2026-10'))[0].paymentAccountId).toBe(visa);
   });
 });

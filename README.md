@@ -112,6 +112,14 @@ balance (and taken back out if you edit or delete it). One account can be marked
 for income, so it is pre-selected. "Started with" leaves this month's deposits out, so income is
 not counted twice.
 
+### Credit cards and what an expense was paid with
+
+An account can be marked as a **credit card** paid from one of your bank accounts. Its balance is
+what you owe, shown as negative. An expense you paid yourself has **Paid with**: the account or
+card chosen goes down by the full amount, and follows the expense if it is edited or deleted.
+Paying the card (on the card's own screen) moves money from the linked account to the card and is
+not an expense. One account or card can be the default payment method.
+
 ## Accounts and planned expenses
 
 The Accounts tab shows everything in one place: each account in its own currency, the expenses you
