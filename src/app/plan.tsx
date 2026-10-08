@@ -36,6 +36,7 @@ export default function PlanScreen() {
           categories,
           inMonthIds,
           budgets: await getBudgets(db, month),
+          expectedIncomeCents: existing.expectedIncomeCents,
           copiedFrom: null,
         };
       }
@@ -44,6 +45,7 @@ export default function PlanScreen() {
         categories,
         inMonthIds,
         budgets: previous?.budgets ?? {},
+        expectedIncomeCents: previous?.month.expectedIncomeCents ?? 0,
         copiedFrom: previous?.month.monthKey ?? null,
       };
     },
@@ -59,6 +61,7 @@ function PlanForm({
   categories,
   inMonthIds,
   budgets,
+  expectedIncomeCents,
   copiedFrom,
 }: {
   month: MonthKey;
@@ -66,10 +69,14 @@ function PlanForm({
   categories: Category[];
   inMonthIds: string[];
   budgets: Record<string, number>;
+  expectedIncomeCents: number;
   copiedFrom: MonthKey | null;
 }) {
   const db = useSQLiteContext();
   const theme = useTheme();
+  const [incomeText, setIncomeText] = useState(
+    expectedIncomeCents > 0 ? centsToInputText(expectedIncomeCents) : '',
+  );
   const [budgetTexts, setBudgetTexts] = useState<Record<string, string>>(() =>
     Object.fromEntries(
       categories.map((c) => [c.id, budgets[c.id] ? centsToInputText(budgets[c.id]) : '']),
@@ -89,7 +96,9 @@ function PlanForm({
     categoryId: c.id,
     amountCents: budgetText(c.id).trim() === '' ? 0 : parseAmountToCents(budgetText(c.id)),
   }));
-  const invalid = parsedBudgets.some((b) => b.amountCents === null);
+  // An empty salary field means none is expected.
+  const expectedIncome = incomeText.trim() === '' ? 0 : parseAmountToCents(incomeText);
+  const invalid = expectedIncome === null || parsedBudgets.some((b) => b.amountCents === null);
   const totalBudget = parsedBudgets.reduce((sum, b) => sum + (b.amountCents ?? 0), 0);
 
   async function save() {
@@ -97,6 +106,7 @@ function PlanForm({
     try {
       await saveMonthPlan(db, {
         month,
+        expectedIncomeCents: expectedIncome,
         budgets: parsedBudgets.map((b) => ({ categoryId: b.categoryId, amountCents: b.amountCents ?? 0 })),
         // Only categories that would otherwise be in this month need to be recorded as removed.
         removedCategoryIds: available
@@ -130,6 +140,23 @@ function PlanForm({
           Budgets copied from {formatMonth(copiedFrom)}. Adjust anything that changed.
         </ThemedText>
       ) : null}
+
+      <Field
+        label="Expected salary this month"
+        value={incomeText}
+        onChangeText={setIncomeText}
+        keyboardType="decimal-pad"
+        placeholder="0.00"
+      />
+      {expectedIncome === null ? (
+        <ThemedText type="small" style={{ color: theme.critical }}>
+          Enter an amount like 2500.00
+        </ThemedText>
+      ) : (
+        <ThemedText type="small" themeColor="textSecondary">
+          What you expect to receive. It counts in the planned end until you log the real income.
+        </ThemedText>
+      )}
 
       <SectionLabel>Budget per category</SectionLabel>
       <Card style={{ gap: 0, paddingVertical: 4 }}>
@@ -196,6 +223,26 @@ function PlanForm({
           </ThemedText>
           <Money cents={totalBudget} type="smallBold" />
         </View>
+        {expectedIncome ? (
+          <>
+            <View style={styles.total}>
+              <ThemedText type="small" themeColor="textSecondary">
+                Expected salary
+              </ThemedText>
+              <Money cents={expectedIncome} type="smallBold" />
+            </View>
+            <View style={styles.total}>
+              <ThemedText type="small" themeColor="textSecondary">
+                {expectedIncome - totalBudget < 0 ? 'Budgeted over the salary' : 'Salary left unassigned'}
+              </ThemedText>
+              <Money
+                cents={Math.abs(expectedIncome - totalBudget)}
+                type="smallBold"
+                color={expectedIncome - totalBudget < 0 ? theme.critical : theme.good}
+              />
+            </View>
+          </>
+        ) : null}
       </Card>
 
       <Button title="Save plan" onPress={save} disabled={invalid} />

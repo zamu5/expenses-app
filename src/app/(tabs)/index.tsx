@@ -1,7 +1,6 @@
 import { router } from 'expo-router';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import { BalanceBetweenCard } from '@/components/balance-between-card';
 import { IncomeList } from '@/components/income-list';
 import { MonthSwitcher } from '@/components/month-switcher';
 import { ThemedText } from '@/components/themed-text';
@@ -42,8 +41,6 @@ export default function MonthScreen() {
 
         {error ? <ThemedText>Could not load this month: {error.message}</ThemedText> : null}
 
-        <BalanceBetweenCard />
-
         {data && !data.month ? (
           <>
             <EmptyState
@@ -62,9 +59,7 @@ export default function MonthScreen() {
               currentCents={overview?.netWorth.totalHomeCents ?? 0}
               missingRates={overview?.netWorth.missingRates ?? []}
               plannedCents={data.summary.plannedEndCents}
-              projectedCents={data.summary.projectedEndCents}
               status={data.summary.status}
-              isEarly={data.summary.isEarlyEstimate}
               daysElapsed={data.daysElapsed}
               daysInMonth={data.daysInMonth}
             />
@@ -96,14 +91,11 @@ function BalanceCard(props: {
   missingRates: string[];
   /** Money in the account you pay from: start + income - what you paid, with payments between you two. */
   plannedCents: number;
-  projectedCents: number;
   status: 'onTrack' | 'watch' | 'danger';
-  isEarly: boolean;
   daysElapsed: number;
   daysInMonth: number;
 }) {
   const theme = useTheme();
-  const statusColor = useStatusColor(props.status);
   const dayLabel =
     props.daysElapsed === 0
       ? 'Not started yet'
@@ -136,11 +128,6 @@ function BalanceCard(props: {
       <View style={styles.between}>
         <Stat label="Started with" cents={props.startingCents} onPress={() => router.navigate('/accounts')} />
         <Stat label="Planned end" cents={props.plannedCents} />
-        <Stat
-          label={props.isEarly ? 'Projected (early)' : 'Projected end'}
-          cents={props.projectedCents}
-          color={statusColor}
-        />
       </View>
       <View style={[styles.between, styles.incomeRow, { borderTopColor: theme.separator }]}>
         <Stat label="Income this month" cents={props.incomeCents} color={theme.good} />

@@ -29,6 +29,8 @@ export interface Month {
   monthKey: string;
   /** No longer used: what a month starts with now comes from the accounts. Kept for old data. */
   startingBalanceCents: number;
+  /** Income the plan expects this month, e.g. the salary. 0 when none was set. */
+  expectedIncomeCents: number;
 }
 
 export interface Expense {

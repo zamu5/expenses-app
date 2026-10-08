@@ -33,6 +33,7 @@ export async function loadMonthView(
   const summary = computeMonthSummary({
     startingBalanceCents: startedWithCents,
     incomeCents,
+    expectedIncomeCents: month?.expectedIncomeCents ?? 0,
     categories,
     daysInMonth: total,
     daysElapsed: elapsed,

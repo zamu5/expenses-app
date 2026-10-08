@@ -98,7 +98,8 @@ The math is in `src/domain/split.ts`. The two names are `PEOPLE` in `src/config.
 ## Income
 
 Money you receive (salary, a refund) is logged with **+ Add income** on the Month tab. It is not
-an expense: it raises the month's current, planned and projected balances.
+an expense. The month's plan can hold an **expected salary**: Planned end counts it until the real
+income is logged, and from then on counts whichever is larger, so it is never counted twice.
 
 ## Accounts and planned expenses
 

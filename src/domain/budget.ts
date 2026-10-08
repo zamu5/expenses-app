@@ -31,6 +31,8 @@ export interface MonthInput {
   startingBalanceCents: Cents;
   /** Money received during the month (salary, refunds). Defaults to 0. */
   incomeCents?: Cents;
+  /** Income the plan expects this month (the salary). Defaults to 0. */
+  expectedIncomeCents?: Cents;
   categories: CategoryInput[];
   daysInMonth: number;
   /** Days of the month that have passed, counting today (0 for a future month, all for a past one). */
@@ -45,7 +47,10 @@ export interface MonthSummary {
   totalIncomeCents: Cents;
   /** Money you should have right now: what you started with, plus income, minus spending. */
   currentBalanceCents: Cents;
-  /** Money left at the end if every category spends exactly its budget. */
+  /**
+   * Money left at the end if every category spends exactly its budget. Counts the expected income
+   * until more than that has actually been received, so it is right before the salary arrives.
+   */
   plannedEndCents: Cents;
   /** Money left at the end if you keep spending at today's pace. */
   projectedEndCents: Cents;
@@ -111,12 +116,14 @@ export function computeMonthSummary(input: MonthInput): MonthSummary {
   const totalIncomeCents = input.incomeCents ?? 0;
   const availableCents = startingBalanceCents + totalIncomeCents;
   const currentBalanceCents = availableCents - totalSpentCents;
-  const plannedEndCents = availableCents - totalBudgetCents;
+  const plannedIncomeCents = Math.max(totalIncomeCents, input.expectedIncomeCents ?? 0);
+  const plannedEndCents = startingBalanceCents + plannedIncomeCents - totalBudgetCents;
   const projectedEndCents = availableCents - sum((c) => c.projectedSpendCents);
 
+  // Danger: even sticking to the budget ends below zero. Watch: some category is already over.
   let status: MonthStatus = 'onTrack';
-  if (projectedEndCents < 0) status = 'danger';
-  else if (projectedEndCents < plannedEndCents) status = 'watch';
+  if (plannedEndCents < 0) status = 'danger';
+  else if (categories.some((c) => c.status === 'over')) status = 'watch';
 
   return {
     totalBudgetCents,

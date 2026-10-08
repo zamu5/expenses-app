@@ -109,7 +109,7 @@ describe('a month end to end', () => {
     expect(summary.currentBalanceCents).toBe(159000);
     expect(summary.plannedEndCents).toBe(105000);
     expect(summary.projectedEndCents).toBe(87000);
-    expect(summary.status).toBe('watch');
+    expect(summary.status).toBe('onTrack');
   });
 });
 
@@ -289,7 +289,7 @@ describe('accounts', () => {
     const id = await account('Chequing', 'CAD', 214498);
     // Put the database back to how version 5 could look, then run the pending migration.
     await db.runAsync('UPDATE accounts SET is_budget_account = 1 WHERE id = ?', [id]);
-    await db.execAsync('PRAGMA user_version = 5');
+    await db.execAsync('ALTER TABLE months DROP COLUMN expected_income_cents; PRAGMA user_version = 5');
     await migrate(db);
 
     const row = await db.getFirstAsync<{ is_budget_account: number }>(
@@ -491,5 +491,27 @@ describe('every split number reconciles to the cent', () => {
     const everything = await listExpenses(db, '2026-10');
     const spent = (await getMonthCategoryInputs(db, '2026-10')).find((c) => c.id === fun)!.spentCents;
     expect(spent).toBe(everything.reduce((sum, e) => sum + ownerShareCents(e), 0));
+  });
+});
+
+describe('expected income in the plan', () => {
+  it('is saved with the plan, kept when only a budget changes, and offered to the next month', async () => {
+    const fun = await idOf('Fun');
+    await saveMonthPlan(db, { month: '2026-10', expectedIncomeCents: 250000, budgets: [{ categoryId: fun, amountCents: 100 }] });
+    expect((await getMonth(db, '2026-10'))?.expectedIncomeCents).toBe(250000);
+
+    await setBudget(db, '2026-10', fun, 200);
+    expect((await getMonth(db, '2026-10'))?.expectedIncomeCents).toBe(250000);
+
+    await saveMonthPlan(db, { month: '2026-10', expectedIncomeCents: 0, budgets: [] });
+    expect((await getMonth(db, '2026-10'))?.expectedIncomeCents).toBe(0);
+
+    await saveMonthPlan(db, { month: '2026-10', expectedIncomeCents: 260000, budgets: [] });
+    expect((await getPreviousPlan(db, '2026-11'))?.month.expectedIncomeCents).toBe(260000);
+  });
+
+  it('is zero for a month planned without it', async () => {
+    await saveMonthPlan(db, { month: '2026-10', budgets: [] });
+    expect((await getMonth(db, '2026-10'))?.expectedIncomeCents).toBe(0);
   });
 });

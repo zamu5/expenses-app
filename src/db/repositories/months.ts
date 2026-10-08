@@ -10,16 +10,22 @@ interface MonthRow {
   id: string;
   month_key: string;
   starting_balance_cents: number;
+  expected_income_cents: number;
 }
 
 export async function getMonth(db: Db, month: MonthKey): Promise<Month | null> {
   const row = await db.getFirstAsync<MonthRow>(
-    `SELECT id, month_key, starting_balance_cents FROM months
+    `SELECT id, month_key, starting_balance_cents, expected_income_cents FROM months
      WHERE month_key = ? AND deleted_at IS NULL`,
     [month],
   );
   return row
-    ? { id: row.id, monthKey: row.month_key, startingBalanceCents: row.starting_balance_cents }
+    ? {
+        id: row.id,
+        monthKey: row.month_key,
+        startingBalanceCents: row.starting_balance_cents,
+        expectedIncomeCents: row.expected_income_cents,
+      }
     : null;
 }
 
@@ -53,6 +59,8 @@ export interface MonthPlan {
   month: MonthKey;
   /** No longer used by the app; a new month stores 0. */
   startingBalanceCents?: number;
+  /** Income expected this month. Left out, an existing month keeps what it had. */
+  expectedIncomeCents?: number;
   budgets: { categoryId: string; amountCents: number }[];
   /** Categories taken out of this month only. They stay available for other months. */
   removedCategoryIds?: string[];
@@ -63,10 +71,21 @@ export async function saveMonthPlan(db: Db, plan: MonthPlan): Promise<void> {
   const now = nowISO();
   await db.withTransactionAsync(async () => {
     await db.runAsync(
-      `INSERT INTO months (id, month_key, starting_balance_cents, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?)
-       ON CONFLICT (month_key) DO UPDATE SET updated_at = excluded.updated_at`,
-      [newId(), plan.month, plan.startingBalanceCents ?? 0, now, now],
+      `INSERT INTO months
+         (id, month_key, starting_balance_cents, expected_income_cents, created_at, updated_at)
+       VALUES (?, ?, ?, COALESCE(?, 0), ?, ?)
+       ON CONFLICT (month_key) DO UPDATE SET
+         expected_income_cents = COALESCE(?, expected_income_cents),
+         updated_at = excluded.updated_at`,
+      [
+        newId(),
+        plan.month,
+        plan.startingBalanceCents ?? 0,
+        plan.expectedIncomeCents ?? null,
+        now,
+        now,
+        plan.expectedIncomeCents ?? null,
+      ],
     );
     const month = await getMonth(db, plan.month);
     if (!month) throw new Error(`Month ${plan.month} was not saved`);
