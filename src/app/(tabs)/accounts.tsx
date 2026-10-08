@@ -77,11 +77,7 @@ export default function AccountsScreen() {
       <AccountList
         accounts={accounts}
         hint={(a) =>
-          a.isBudgetAccount
-            ? data.monthView.month
-              ? `Budget account · ${monthName} balance`
-              : `Budget account · ${monthName} is not planned yet`
-            : `Updated ${formatDay(a.balanceUpdatedOn)}${a.includeInStart ? '' : ' · not in starting balance'}`
+          `Updated ${formatDay(a.balanceUpdatedOn)}${a.includeInStart ? '' : ' · not in starting balance'}`
         }
       />
       <Card style={{ gap: 0, paddingVertical: 4 }}>

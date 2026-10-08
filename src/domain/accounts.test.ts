@@ -85,45 +85,37 @@ describe('parseCurrencyCode', () => {
 });
 
 describe('computeStartedWith', () => {
+  const account = (currency: string, balanceCents: number, includeInStart = true) => ({
+    kind: 'account' as const,
+    currency,
+    balanceCents,
+    includeInStart,
+  });
   const accounts = [
-    // The budget account's own balance is ignored: the month's starting balance is used instead.
-    { kind: 'account' as const, currency: 'CAD', balanceCents: 999999, isBudgetAccount: true, includeInStart: true },
-    { kind: 'account' as const, currency: 'CAD', balanceCents: 1000000, isBudgetAccount: false, includeInStart: true },
-    { kind: 'account' as const, currency: 'COP', balanceCents: 295000000, isBudgetAccount: false, includeInStart: true },
-    { kind: 'account' as const, currency: 'COP', balanceCents: 295000000, isBudgetAccount: false, includeInStart: true },
-    { kind: 'planned' as const, currency: 'CAD', balanceCents: 300000, isBudgetAccount: false, includeInStart: true },
+    account('CAD', 214498),
+    account('CAD', 1000000),
+    account('COP', 295000000),
+    account('COP', 295000000),
+    { ...account('CAD', 300000), kind: 'planned' as const },
   ];
 
-  it('is the other accounts, plus the budget account start, minus planned expenses', () => {
-    // 10,000 + 1,000 + 1,000 (pesos at 2950) + 2,144.98 - 3,000
-    expect(computeStartedWith(accounts, 214498, { COP: 2950 }, 'CAD').totalHomeCents).toBe(1114498);
+  it('adds the switched-on accounts and subtracts planned expenses', () => {
+    // 2,144.98 + 10,000 + 1,000 + 1,000 (pesos at 2950) - 3,000
+    expect(computeStartedWith(accounts, { COP: 2950 }, 'CAD').totalHomeCents).toBe(1114498);
   });
 
   it('leaves out an account that is switched off, but never a planned expense', () => {
     const switchedOff = accounts.map((a, i) => (i === 1 || i === 4 ? { ...a, includeInStart: false } : a));
-    // 1,000 + 1,000 (pesos) + 2,144.98 - 3,000
-    expect(computeStartedWith(switchedOff, 214498, { COP: 2950 }, 'CAD').totalHomeCents).toBe(114498);
-  });
-
-  it('ignores the typed start when no account is the budget account, so it is not counted twice', () => {
-    // The main account is a normal account holding 2,144.98; the plan also says 2,144.98.
-    const allNormal = accounts.map((a) => ({ ...a, isBudgetAccount: false, balanceCents: a.isBudgetAccount ? 214498 : a.balanceCents }));
-    // 2,144.98 + 10,000 + 1,000 + 1,000 - 3,000, the same as with a marked budget account
-    expect(computeStartedWith(allNormal, 214498, { COP: 2950 }, 'CAD').totalHomeCents).toBe(1114498);
-  });
-
-  it('uses the typed start with only planned expenses and no accounts', () => {
-    const onlyPlanned = accounts.filter((a) => a.kind === 'planned');
-    expect(computeStartedWith(onlyPlanned, 214498, {}, 'CAD').totalHomeCents).toBe(-85502);
-  });
-
-  it('is just the month start when there are no other accounts', () => {
-    expect(computeStartedWith([], 214498, {}, 'CAD').totalHomeCents).toBe(214498);
+    expect(computeStartedWith(switchedOff, { COP: 2950 }, 'CAD').totalHomeCents).toBe(114498);
   });
 
   it('flags a currency that has no rate', () => {
-    const result = computeStartedWith(accounts, 214498, {}, 'CAD');
+    const result = computeStartedWith(accounts, {}, 'CAD');
     expect(result.missingRates).toEqual(['COP']);
     expect(result.totalHomeCents).toBe(914498);
+  });
+
+  it('is zero with no accounts', () => {
+    expect(computeStartedWith([], {}, 'CAD').totalHomeCents).toBe(0);
   });
 });

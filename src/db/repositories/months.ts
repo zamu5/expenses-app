@@ -1,6 +1,6 @@
 import type { CategoryInput } from '@/domain/budget';
 import type { MonthKey } from '@/domain/dates';
-import { BUDGET_OWNER, otherPerson, ownerShareCents, type BudgetAccountFlows } from '@/domain/split';
+import { BUDGET_OWNER, ownerShareCents } from '@/domain/split';
 import { newId, nowISO } from '@/lib/id';
 
 import { notifyDataChanged } from '../events';
@@ -51,7 +51,8 @@ export async function getPreviousPlan(
 
 export interface MonthPlan {
   month: MonthKey;
-  startingBalanceCents: number;
+  /** No longer used by the app; a new month stores 0. */
+  startingBalanceCents?: number;
   budgets: { categoryId: string; amountCents: number }[];
   /** Categories taken out of this month only. They stay available for other months. */
   removedCategoryIds?: string[];
@@ -64,10 +65,8 @@ export async function saveMonthPlan(db: Db, plan: MonthPlan): Promise<void> {
     await db.runAsync(
       `INSERT INTO months (id, month_key, starting_balance_cents, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?)
-       ON CONFLICT (month_key) DO UPDATE SET
-         starting_balance_cents = excluded.starting_balance_cents,
-         updated_at = excluded.updated_at`,
-      [newId(), plan.month, plan.startingBalanceCents, now, now],
+       ON CONFLICT (month_key) DO UPDATE SET updated_at = excluded.updated_at`,
+      [newId(), plan.month, plan.startingBalanceCents ?? 0, now, now],
     );
     const month = await getMonth(db, plan.month);
     if (!month) throw new Error(`Month ${plan.month} was not saved`);
@@ -111,7 +110,6 @@ export async function setBudget(
   if (!existing) throw new Error(`Plan ${month} before setting budgets`);
   await saveMonthPlan(db, {
     month,
-    startingBalanceCents: existing.startingBalanceCents,
     budgets: [{ categoryId, amountCents }],
   });
 }
@@ -166,38 +164,4 @@ export async function getMonthCategoryInputs(db: Db, month: MonthKey): Promise<C
     budgetCents: r.budget_cents ?? 0,
     spentCents: ownerShareCents(r.own_cents ?? 0, r.shared_cents ?? 0),
   }));
-}
-
-/**
- * The money that moved through the budget account in one month, for budgetAccountCents():
- * what the owner paid in full, and the payments between the two people.
- */
-export async function getBudgetAccountFlows(db: Db, month: MonthKey): Promise<BudgetAccountFlows> {
-  const prefix = `${month}-%`;
-  const sum = async (sql: string, params: string[]) =>
-    (await db.getFirstAsync<{ total: number | null }>(sql, params))?.total ?? 0;
-
-  const existing = await getMonth(db, month);
-  return {
-    startingBalanceCents: existing?.startingBalanceCents ?? 0,
-    incomeCents: await sum(
-      'SELECT SUM(amount_cents) AS total FROM incomes WHERE deleted_at IS NULL AND received_on LIKE ?',
-      [prefix],
-    ),
-    paidByOwnerCents: await sum(
-      `SELECT SUM(amount_cents) AS total FROM expenses
-       WHERE deleted_at IS NULL AND paid_by = ? AND spent_on LIKE ?`,
-      [BUDGET_OWNER, prefix],
-    ),
-    receivedFromOtherCents: await sum(
-      `SELECT SUM(amount_cents) AS total FROM settlements
-       WHERE deleted_at IS NULL AND from_person = ? AND settled_on LIKE ?`,
-      [otherPerson(BUDGET_OWNER), prefix],
-    ),
-    paidToOtherCents: await sum(
-      `SELECT SUM(amount_cents) AS total FROM settlements
-       WHERE deleted_at IS NULL AND from_person = ? AND settled_on LIKE ?`,
-      [BUDGET_OWNER, prefix],
-    ),
-  };
 }

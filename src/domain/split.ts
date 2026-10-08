@@ -55,27 +55,3 @@ export const BUDGET_OWNER: Person = 'sergio';
 export function ownerShareCents(onlyForOwnerCents: Cents, sharedCents: Cents): Cents {
   return onlyForOwnerCents + Math.round(sharedCents / 2);
 }
-
-export interface BudgetAccountFlows {
-  startingBalanceCents: Cents;
-  incomeCents: Cents;
-  /** Every expense the owner paid this month, in full, whoever it was for. */
-  paidByOwnerCents: Cents;
-  /** Money the other person paid back this month, and money the owner paid them. */
-  receivedFromOtherCents: Cents;
-  paidToOtherCents: Cents;
-}
-
-/**
- * The money actually in the budget account: unlike the budget, this counts what left the account,
- * so a shared expense the owner paid comes out in full until the other half is paid back.
- */
-export function budgetAccountCents(f: BudgetAccountFlows): Cents {
-  return (
-    f.startingBalanceCents +
-    f.incomeCents -
-    f.paidByOwnerCents +
-    f.receivedFromOtherCents -
-    f.paidToOtherCents
-  );
-}

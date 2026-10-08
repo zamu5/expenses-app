@@ -106,18 +106,14 @@ The Accounts tab shows everything in one place: each account in its own currency
 are planning for but have not put in a month (counted as negative), and a total in your home
 currency. Nothing is predefined; you add, rename and delete accounts yourself.
 
-- Mark one account as the **Budget account**: its balance is not typed. It is what the selected
-  month started with, plus income, minus everything you paid (in full), plus or minus the payments
-  between the two of you.
-- Two more rows are worked out by the app: what the two of you owe each other, and
-  **Left to spend** (the month's budget not spent yet, counted as negative).
+- Every balance is typed in by hand, and so are exchange rates ("1 CAD = how many COP?").
+  A currency without a rate is shown but left out of the total. Logging an expense does not move
+  any account: update the balance when it changes.
+- Two rows are worked out by the app: what the two of you owe each other, and **Left to spend**
+  (the month's budget not spent yet, counted as negative).
 - The total of this tab is the **Current balance** on the Month tab.
-- **Started with** on the Month tab is the budget account's start (typed in the month's plan; ignored
-  when no account is marked as the budget account, so nothing is counted twice) plus every other
-  account with **Include in starting balance** switched on, minus planned expenses.
-  The switch does not affect the Accounts total, which always shows everything.
-- Other balances are typed in by hand, and so are exchange rates ("1 CAD = how many COP?").
-  A currency without a rate is shown but left out of the total.
+- **Started with** on the Month tab is every account with **Include in starting balance** switched
+  on, minus planned expenses. Nothing is typed for the month itself.
 
 The math is in `src/domain/accounts.ts`.
 

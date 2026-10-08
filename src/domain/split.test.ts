@@ -1,6 +1,5 @@
 import {
   balanceCents,
-  budgetAccountCents,
   describeBalance,
   ownerShareCents,
   type SplitTotals,
@@ -66,36 +65,5 @@ describe('ownerShareCents', () => {
 
   it('rounds the half once, on the total', () => {
     expect(ownerShareCents(0, 1001)).toBe(501);
-  });
-});
-
-describe('budgetAccountCents', () => {
-  const flows = {
-    startingBalanceCents: 300000,
-    incomeCents: 0,
-    paidByOwnerCents: 0,
-    receivedFromOtherCents: 0,
-    paidToOtherCents: 0,
-  };
-
-  it('takes out in full what the owner paid, and adds income', () => {
-    expect(budgetAccountCents({ ...flows, incomeCents: 250000, paidByOwnerCents: 8334 })).toBe(541666);
-  });
-
-  it('moves with payments between the two people', () => {
-    expect(budgetAccountCents({ ...flows, receivedFromOtherCents: 4167 })).toBe(304167);
-    expect(budgetAccountCents({ ...flows, paidToOtherCents: 2000 })).toBe(298000);
-  });
-
-  it('together with what is owed, equals the budget view of the same month', () => {
-    // Owner paid 83.34 shared: account is down 83.34, the other person owes 41.67,
-    // and the budget says 41.67 was spent. 3000 - 83.34 + 41.67 = 3000 - 41.67.
-    const account = budgetAccountCents({ ...flows, paidByOwnerCents: 8334 });
-    const owed = balanceCents({
-      sharedPaidBy: { sergio: 8334, adriana: 0 },
-      paidForOtherBy: { sergio: 0, adriana: 0 },
-      settledBy: { sergio: 0, adriana: 0 },
-    });
-    expect(account + owed).toBe(300000 - ownerShareCents(0, 8334));
   });
 });

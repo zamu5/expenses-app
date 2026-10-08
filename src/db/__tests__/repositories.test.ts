@@ -4,7 +4,7 @@
 import { computeNetWorth } from '@/domain/accounts';
 import { parseBackup } from '@/domain/backup';
 import { computeMonthSummary } from '@/domain/budget';
-import { balanceCents, budgetAccountCents } from '@/domain/split';
+import { balanceCents } from '@/domain/split';
 
 import { subscribeToDataChanges } from '../events';
 import { LATEST_SCHEMA_VERSION, migrate } from '../migrations';
@@ -26,7 +26,6 @@ import {
 import { addExpense, deleteExpense, listExpenses, updateExpense } from '../repositories/expenses';
 import { addIncome, deleteIncome, getIncomeTotal, listIncomes, updateIncome } from '../repositories/incomes';
 import {
-  getBudgetAccountFlows,
   getBudgets,
   getMonth,
   getMonthCategoryInputs,
@@ -280,14 +279,20 @@ describe('accounts', () => {
     ]);
   });
 
-  it('keeps a single budget account', async () => {
-    const first = await account('Chequing', 'CAD', 0, { isBudgetAccount: true });
-    const second = await account('Other', 'CAD', 0, { isBudgetAccount: true });
-    const budget = (await listAccounts(db)).filter((a) => a.isBudgetAccount);
-    expect(budget.map((a) => a.id)).toEqual([second]);
+  it('no longer has a budget account: an upgrade clears the old mark', async () => {
+    const id = await account('Chequing', 'CAD', 214498);
+    // Put the database back to how version 5 could look, then run the pending migration.
+    await db.runAsync('UPDATE accounts SET is_budget_account = 1 WHERE id = ?', [id]);
+    await db.execAsync('PRAGMA user_version = 5');
+    await migrate(db);
 
-    await updateAccount(db, first, { name: 'Chequing', kind: 'account', currency: 'CAD', balanceCents: 0, isBudgetAccount: true, balanceUpdatedOn: '2026-10-08' });
-    expect((await listAccounts(db)).filter((a) => a.isBudgetAccount).map((a) => a.id)).toEqual([first]);
+    const row = await db.getFirstAsync<{ is_budget_account: number }>(
+      'SELECT is_budget_account FROM accounts WHERE id = ?',
+      [id],
+    );
+    expect(row?.is_budget_account).toBe(0);
+    // The balance is whatever was typed; nothing is worked out for it.
+    expect((await listAccounts(db))[0]).toMatchObject({ name: 'Chequing', balanceCents: 214498 });
   });
 
   it('feeds the net worth math, with a typed exchange rate', async () => {
@@ -401,27 +406,6 @@ describe('the budget counts only your share', () => {
     await saveMonthPlan(db, { month: '2026-10', startingBalanceCents: 1000, budgets: [], removedCategoryIds: [fun] });
     await addExpense(db, { categoryId: fun, amountCents: 7000, spentOn: '2026-10-05', forWhom: 'adriana' });
     expect((await getMonthCategoryInputs(db, '2026-10')).find((c) => c.id === fun)).toMatchObject({ spentCents: 0 });
-  });
-
-  it('while the budget account counts what was really paid from it', async () => {
-    const fun = await idOf('Fun');
-    await saveMonthPlan(db, { month: '2026-10', startingBalanceCents: 300000, budgets: [{ categoryId: fun, amountCents: 20000 }] });
-    await addIncome(db, { amountCents: 100000, receivedOn: '2026-10-15' });
-    await addExpense(db, { categoryId: fun, amountCents: 8334, spentOn: '2026-10-02', paidBy: 'sergio', forWhom: 'shared' });
-    await addExpense(db, { categoryId: fun, amountCents: 3000, spentOn: '2026-10-03', paidBy: 'adriana', forWhom: 'shared' });
-    await addExpense(db, { categoryId: fun, amountCents: 99900, spentOn: '2026-09-30', paidBy: 'sergio', forWhom: 'sergio' });
-    await addSettlement(db, { fromPerson: 'adriana', amountCents: 1000, settledOn: '2026-10-20' });
-    await addSettlement(db, { fromPerson: 'sergio', amountCents: 500, settledOn: '2026-10-21' });
-
-    const flows = await getBudgetAccountFlows(db, '2026-10');
-    expect(flows).toEqual({
-      startingBalanceCents: 300000,
-      incomeCents: 100000,
-      paidByOwnerCents: 8334,
-      receivedFromOtherCents: 1000,
-      paidToOtherCents: 500,
-    });
-    expect(budgetAccountCents(flows)).toBe(392166);
   });
 });
 

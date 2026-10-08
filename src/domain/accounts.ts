@@ -73,30 +73,17 @@ export function computeNetWorth(
 }
 
 /**
- * What a month started with: every account marked "include in starting balance", minus every
- * planned expense. Returns a NetWorth so currencies without a rate are flagged as in the total.
- *
- * `budgetStartCents` is the starting balance typed in the month's plan. It stands for the budget
- * account, so it replaces that account's own balance. When no account is marked as the budget
- * account, the typed start is ignored, because that money is already one of the accounts and would
- * be counted twice; it is only used on its own when there are no accounts at all.
+ * What a month starts with: every account marked "include in starting balance", minus every
+ * planned expense. Nothing is typed for the month itself. Returns a NetWorth so currencies
+ * without a rate are flagged the same way as in the total.
  */
 export function computeStartedWith(
-  accounts: (NetWorthItem & { isBudgetAccount: boolean; includeInStart: boolean })[],
-  budgetStartCents: Cents,
+  accounts: (NetWorthItem & { includeInStart: boolean })[],
   rates: Record<string, number>,
   homeCurrency: string,
 ): NetWorth {
-  const hasBudgetAccount = accounts.some((a) => a.isBudgetAccount);
-  const hasAccounts = accounts.some((a) => a.kind === 'account');
-  const useTypedStart = hasBudgetAccount || !hasAccounts;
   return computeNetWorth(
-    [
-      ...accounts.filter((a) => !a.isBudgetAccount && (a.kind === 'planned' || a.includeInStart)),
-      ...(useTypedStart
-        ? [{ kind: 'account' as const, currency: homeCurrency, balanceCents: budgetStartCents }]
-        : []),
-    ],
+    accounts.filter((a) => a.kind === 'planned' || a.includeInStart),
     rates,
     homeCurrency,
   );

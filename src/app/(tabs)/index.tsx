@@ -44,7 +44,7 @@ export default function MonthScreen() {
           <>
             <EmptyState
               title={`Plan ${formatMonth(selectedMonth)}`}
-              body="Set the money you start the month with and a budget for each category."
+              body="Set a budget for each category. What you start with comes from your accounts."
             />
             <Button title="Plan this month" onPress={() => router.push('/plan')} />
           </>
@@ -53,22 +53,12 @@ export default function MonthScreen() {
         {data?.month ? (
           <>
             <BalanceCard
-              startingCents={overview?.startedWithCents ?? 0}
+              startingCents={overview?.startedWith.totalHomeCents ?? 0}
               incomeCents={data.summary.totalIncomeCents}
               currentCents={overview?.netWorth.totalHomeCents ?? 0}
               missingRates={overview?.netWorth.missingRates ?? []}
-              budgetAccountCents={overview?.hasBudgetAccount ? overview.budgetAccountCents : null}
-              // The summary's ends are for the budget account alone; shift them to cover all accounts.
-              plannedCents={
-                data.summary.plannedEndCents +
-                (overview?.startedWithCents ?? 0) -
-                data.month.startingBalanceCents
-              }
-              projectedCents={
-                data.summary.projectedEndCents +
-                (overview?.startedWithCents ?? 0) -
-                data.month.startingBalanceCents
-              }
+              plannedCents={data.summary.plannedEndCents}
+              projectedCents={data.summary.projectedEndCents}
               status={data.summary.status}
               isEarly={data.summary.isEarlyEstimate}
               daysElapsed={data.daysElapsed}
@@ -92,15 +82,13 @@ export default function MonthScreen() {
 }
 
 function BalanceCard(props: {
-  /** All accounts at the start: other accounts + the budget account's start - planned expenses. */
+  /** Accounts marked "include in starting balance", minus planned expenses. */
   startingCents: number;
   incomeCents: number;
   /** The Accounts tab total: every account, what is owed, minus planned expenses and what is left to spend. */
   currentCents: number;
   missingRates: string[];
   /** Money in the account you pay from: start + income - what you paid, with payments between you two. */
-  /** Null when no account is marked as the budget account. */
-  budgetAccountCents: number | null;
   plannedCents: number;
   projectedCents: number;
   status: 'onTrack' | 'watch' | 'danger';
@@ -140,7 +128,7 @@ function BalanceCard(props: {
         </ThemedText>
       </Pressable>
       <View style={styles.between}>
-        <Stat label="Started with" cents={props.startingCents} onPress={() => router.push('/plan')} />
+        <Stat label="Started with" cents={props.startingCents} onPress={() => router.navigate('/accounts')} />
         <Stat label="Planned end" cents={props.plannedCents} />
         <Stat
           label={props.isEarly ? 'Projected (early)' : 'Projected end'}
@@ -149,9 +137,6 @@ function BalanceCard(props: {
         />
       </View>
       <View style={[styles.between, styles.incomeRow, { borderTopColor: theme.separator }]}>
-        {props.budgetAccountCents !== null ? (
-          <Stat label="Budget account" cents={props.budgetAccountCents} />
-        ) : null}
         <Stat label="Income this month" cents={props.incomeCents} color={theme.good} />
         <Pressable accessibilityRole="button" hitSlop={12} onPress={() => router.push('/income')}>
           <ThemedText type="smallBold" style={{ color: theme.tint }}>
