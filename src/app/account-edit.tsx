@@ -29,7 +29,9 @@ export default function AccountEditScreen() {
       const [account, all] = await Promise.all([id ? getAccount(db, id) : null, listAccounts(db)]);
       // Offer the currencies already in use, so a second account in pesos is one tap.
       const currencies = [...new Set([CURRENCY, ...all.map((a) => a.currency)])];
-      return { account, currencies };
+      // The default for income belongs to one account; the others do not offer the switch.
+      const incomeDefault = all.find((a) => a.isIncomeDefault && a.id !== id) ?? null;
+      return { account, currencies, incomeDefaultName: incomeDefault?.name ?? null };
     },
     [id],
   );
@@ -39,6 +41,7 @@ export default function AccountEditScreen() {
       account={data.account}
       kind={data.account?.kind ?? (kind === 'planned' ? 'planned' : 'account')}
       currencies={data.currencies}
+      incomeDefaultName={data.incomeDefaultName}
     />
   );
 }
@@ -47,10 +50,13 @@ function AccountForm({
   account,
   kind,
   currencies,
+  incomeDefaultName,
 }: {
   account: Account | null;
   kind: AccountKind;
   currencies: string[];
+  /** Name of the other account that is already the default for income, if any. */
+  incomeDefaultName: string | null;
 }) {
   const db = useSQLiteContext();
   const theme = useTheme();
@@ -74,7 +80,8 @@ function AccountForm({
       currency,
       balanceCents,
       includeInStart,
-      isIncomeDefault,
+      // Never claim the default while another account holds it.
+      isIncomeDefault: incomeDefaultName === null && currency === CURRENCY && isIncomeDefault,
       // Keep the "updated" day unless the balance itself changed.
       balanceUpdatedOn:
         account && account.balanceCents === balanceCents ? account.balanceUpdatedOn : todayISO(),
@@ -151,14 +158,20 @@ function AccountForm({
           onValueChange={setIncludeInStart}
         />
       ) : null}
-      {!isPlanned ? (
+      {/* Income is typed in the home currency, so only an account in it can receive income. */}
+      {isPlanned || currency !== CURRENCY ? null : incomeDefaultName === null ? (
         <ToggleRow
           label="Default account for income"
           hint="Pre-selected when you log an income or a refund. Only one account can be the default."
           value={isIncomeDefault}
           onValueChange={setIsIncomeDefault}
         />
-      ) : null}
+      ) : (
+        <ThemedText type="small" themeColor="textSecondary">
+          {incomeDefaultName} is the default account for income. To change it, switch it off there
+          first.
+        </ThemedText>
+      )}
 
       <View style={{ gap: 8, marginTop: 8 }}>
         <Button title={account ? 'Save changes' : `Add ${noun}`} onPress={save} disabled={!canSave} />
