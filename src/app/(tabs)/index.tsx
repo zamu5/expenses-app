@@ -203,7 +203,10 @@ const formatPlain = (cents: number) =>
     Math.abs(cents) / 100,
   );
 
-/** One category as a small box: what is left of its budget, what was spent of how much, and a bar. */
+/**
+ * One category as a small box. Top left: what is left of its budget. Then its name, what was
+ * spent of how much, and a bar.
+ */
 function CategoryTile({ category: c, width }: { category: CategorySummary; width: number }) {
   const theme = useTheme();
   const color = useStatusColor(c.status);
@@ -221,9 +224,6 @@ function CategoryTile({ category: c, width }: { category: CategorySummary; width
         styles.tile,
         { width, backgroundColor: theme.backgroundElement, opacity: pressed ? 0.7 : isDone ? 0.55 : 1 },
       ]}>
-      <ThemedText type="small" numberOfLines={2} style={styles.tileName}>
-        {c.name}
-      </ThemedText>
       <View>
         <ThemedText
           numberOfLines={1}
@@ -236,6 +236,14 @@ function CategoryTile({ category: c, width }: { category: CategorySummary; width
           {isDone ? 'done' : isOver ? 'over' : 'left'}
         </ThemedText>
       </View>
+      <ThemedText
+        type="small"
+        numberOfLines={2}
+        adjustsFontSizeToFit
+        minimumFontScale={0.75}
+        style={styles.tileName}>
+        {c.name}
+      </ThemedText>
       <View>
         <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} adjustsFontSizeToFit style={styles.tileCaption}>
           {formatPlain(c.spentCents)} spent
@@ -267,8 +275,8 @@ const styles = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap' },
   tile: { borderRadius: 12, padding: 6, justifyContent: 'space-between', gap: Spacing.one },
   // Two lines are always reserved, so tiles in a row line up whatever the name length.
-  tileName: { fontSize: 12, lineHeight: 15, fontWeight: 600, minHeight: 30 },
-  tileAmount: { fontSize: 14, lineHeight: 18, fontWeight: 700, fontVariant: ['tabular-nums'] },
+  tileName: { fontSize: 15, lineHeight: 18, fontWeight: 700, minHeight: 36 },
+  tileAmount: { fontSize: 13, lineHeight: 16, fontWeight: 600, fontVariant: ['tabular-nums'] },
   tileCaption: { fontSize: 10, lineHeight: 13, fontVariant: ['tabular-nums'] },
   between: {
     flexDirection: 'row',
