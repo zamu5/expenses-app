@@ -44,7 +44,7 @@ export default function CategoryDetailScreen() {
   return (
     <ThemedView style={{ flex: 1 }}>
       <Stack.Screen options={{ title: category.name }} />
-      <Screen tabs>
+      <Screen tabs header>
         <ThemedText type="small" themeColor="textSecondary">
           {formatMonth(month)} · {category.isFixed ? 'Fixed cost' : 'Variable cost'}
         </ThemedText>

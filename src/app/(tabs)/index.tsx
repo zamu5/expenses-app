@@ -242,8 +242,6 @@ function CategoryTile({
         <ThemedText
           type="small"
           numberOfLines={2}
-          adjustsFontSizeToFit
-          minimumFontScale={0.75}
           style={styles.tileName}>
           {c.name}
         </ThemedText>
@@ -266,7 +264,6 @@ function CategoryTile({
             type="small"
             themeColor="textSecondary"
             numberOfLines={1}
-            adjustsFontSizeToFit
             style={[styles.tileCaption, styles.tileSpent]}>
             {formatPlain(c.spentCents)} spent
             {compact ? '' : ` of ${formatPlain(c.budgetCents)}`}
@@ -303,7 +300,8 @@ const styles = StyleSheet.create({
   // Room for a two-line name, so tiles in a row line up whatever the name length.
   tileHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.two, minHeight: 38 },
   // Takes whatever width the amount leaves, wrapping onto more lines.
-  tileName: { flex: 1, minWidth: 0, fontSize: 16, lineHeight: 19, fontWeight: 700 },
+  // No shrink-to-fit here: on iOS it sized some names tiny on the first layout. Long names wrap.
+  tileName: { flex: 1, flexShrink: 1, minWidth: 0, fontSize: 16, lineHeight: 19, fontWeight: 700 },
   // Never shrinks: the amount is always whole, and the name gets what is left.
   tileTopRight: { alignItems: 'flex-end', flexShrink: 0 },
   tileAmount: { fontSize: 16, lineHeight: 19, fontWeight: 700, fontVariant: ['tabular-nums'] },
