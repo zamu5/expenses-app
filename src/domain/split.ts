@@ -55,3 +55,21 @@ export const BUDGET_OWNER: Person = 'sergio';
 export function ownerShareCents(onlyForOwnerCents: Cents, sharedCents: Cents): Cents {
   return onlyForOwnerCents + Math.round(sharedCents / 2);
 }
+
+/** The two filters on the Expenses tab. They combine: e.g. shared expenses that Adriana paid. */
+export interface SplitFilter {
+  paidBy: 'all' | Person;
+  forWhom: 'all' | ForWhom;
+}
+
+export const NO_SPLIT_FILTER: SplitFilter = { paidBy: 'all', forWhom: 'all' };
+
+export function matchesSplitFilter(
+  expense: { paidBy: Person; forWhom: ForWhom },
+  filter: SplitFilter,
+): boolean {
+  return (
+    (filter.paidBy === 'all' || expense.paidBy === filter.paidBy) &&
+    (filter.forWhom === 'all' || expense.forWhom === filter.forWhom)
+  );
+}

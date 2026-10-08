@@ -7,11 +7,13 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { splitLabel } from '@/components/split-label';
 import { Card, Chips, EmptyState, Fab, Money, Screen, SectionLabel, Title } from '@/components/ui';
+import { PEOPLE } from '@/config';
 import { listCategories } from '@/db/repositories/categories';
 import { listExpenses } from '@/db/repositories/expenses';
 import { listIncomes } from '@/db/repositories/incomes';
 import type { Expense } from '@/db/types';
 import { formatDay } from '@/domain/dates';
+import { matchesSplitFilter, type SplitFilter } from '@/domain/split';
 import { useDbQuery } from '@/hooks/use-db-query';
 import { useTheme } from '@/hooks/use-theme';
 import { useUiStore } from '@/store/ui';
@@ -22,6 +24,9 @@ export default function ExpensesScreen() {
   const theme = useTheme();
   const selectedMonth = useUiStore((s) => s.selectedMonth);
   const [filter, setFilter] = useState<string>(ALL);
+  const splitFilter = useUiStore((s) => s.expenseFilter);
+  const setSplitFilter = useUiStore((s) => s.setExpenseFilter);
+  const isSplitFiltered = splitFilter.paidBy !== 'all' || splitFilter.forWhom !== 'all';
 
   const { data } = useDbQuery(
     async (db) => {
@@ -36,8 +41,10 @@ export default function ExpensesScreen() {
   );
 
   const categoryName = new Map(data?.categories.map((c) => [c.id, c.name]));
-  const days = groupByDay(data?.expenses ?? []);
-  const total = (data?.expenses ?? []).reduce((sum, e) => sum + e.amountCents, 0);
+  // The category filter is applied by the query; who paid / shared is applied here.
+  const expenses = (data?.expenses ?? []).filter((e) => matchesSplitFilter(e, splitFilter));
+  const days = groupByDay(expenses);
+  const total = expenses.reduce((sum, e) => sum + e.amountCents, 0);
 
   return (
     <ThemedView style={{ flex: 1 }}>
@@ -45,6 +52,7 @@ export default function ExpensesScreen() {
         <Title>Expenses</Title>
         <MonthSwitcher />
 
+        <SectionLabel>Category</SectionLabel>
         <Chips
           options={[
             { value: ALL, label: 'All' },
@@ -55,9 +63,30 @@ export default function ExpensesScreen() {
           value={filter}
           onChange={setFilter}
         />
+        <SectionLabel>Paid by</SectionLabel>
+        <Chips<SplitFilter['paidBy']>
+          options={[
+            { value: 'all', label: 'All' },
+            { value: 'sergio', label: PEOPLE.sergio },
+            { value: 'adriana', label: PEOPLE.adriana },
+          ]}
+          value={splitFilter.paidBy}
+          onChange={(paidBy) => setSplitFilter({ paidBy })}
+        />
+        <SectionLabel>For</SectionLabel>
+        <Chips<SplitFilter['forWhom']>
+          options={[
+            { value: 'all', label: 'All' },
+            { value: 'shared', label: 'Shared' },
+            { value: 'sergio', label: `Only ${PEOPLE.sergio}` },
+            { value: 'adriana', label: `Only ${PEOPLE.adriana}` },
+          ]}
+          value={splitFilter.forWhom}
+          onChange={(forWhom) => setSplitFilter({ forWhom })}
+        />
 
-        {/* Income has no category, so it only shows when no category filter is on. */}
-        {data && filter === ALL && data.incomes.length > 0 ? (
+        {/* Income has no category or payer, so it only shows when no filter is on. */}
+        {data && filter === ALL && !isSplitFiltered && data.incomes.length > 0 ? (
           <View style={{ gap: 6 }}>
             <View style={styles.between}>
               <SectionLabel>Income</SectionLabel>
@@ -91,14 +120,18 @@ export default function ExpensesScreen() {
           </View>
         ) : null}
 
-        {data && data.expenses.length === 0 ? (
-          <EmptyState title="No expenses yet" body="Tap + to log what you spend." />
+        {data && expenses.length === 0 ? (
+          data.expenses.length === 0 ? (
+            <EmptyState title="No expenses yet" body="Tap + to log what you spend." />
+          ) : (
+            <EmptyState title="Nothing matches" body="No expenses for this filter in this month." />
+          )
         ) : null}
 
-        {data && data.expenses.length > 0 ? (
+        {data && expenses.length > 0 ? (
           <View style={styles.between}>
             <ThemedText type="small" themeColor="textSecondary">
-              {data.expenses.length} expenses
+              {expenses.length} expenses
             </ThemedText>
             <Money cents={total} type="smallBold" />
           </View>

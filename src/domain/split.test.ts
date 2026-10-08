@@ -1,6 +1,8 @@
 import {
   balanceCents,
   describeBalance,
+  matchesSplitFilter,
+  NO_SPLIT_FILTER,
   ownerShareCents,
   type SplitTotals,
 } from './split';
@@ -65,5 +67,33 @@ describe('ownerShareCents', () => {
 
   it('rounds the half once, on the total', () => {
     expect(ownerShareCents(0, 1001)).toBe(501);
+  });
+});
+
+describe('matchesSplitFilter', () => {
+  const sergioShared = { paidBy: 'sergio', forWhom: 'shared' } as const;
+  const adrianaShared = { paidBy: 'adriana', forWhom: 'shared' } as const;
+  const adrianaForSergio = { paidBy: 'adriana', forWhom: 'sergio' } as const;
+  const all = [sergioShared, adrianaShared, adrianaForSergio];
+  const keep = (filter: Parameters<typeof matchesSplitFilter>[1]) =>
+    all.filter((e) => matchesSplitFilter(e, filter));
+
+  it('lets everything through with no filter', () => {
+    expect(keep(NO_SPLIT_FILTER)).toEqual(all);
+  });
+
+  it('filters by who paid, whoever it was for', () => {
+    expect(keep({ paidBy: 'sergio', forWhom: 'all' })).toEqual([sergioShared]);
+    expect(keep({ paidBy: 'adriana', forWhom: 'all' })).toEqual([adrianaShared, adrianaForSergio]);
+  });
+
+  it('filters by who it was for, whoever paid', () => {
+    expect(keep({ paidBy: 'all', forWhom: 'shared' })).toEqual([sergioShared, adrianaShared]);
+    expect(keep({ paidBy: 'all', forWhom: 'sergio' })).toEqual([adrianaForSergio]);
+    expect(keep({ paidBy: 'all', forWhom: 'adriana' })).toEqual([]);
+  });
+
+  it('combines both: shared expenses that Adriana paid', () => {
+    expect(keep({ paidBy: 'adriana', forWhom: 'shared' })).toEqual([adrianaShared]);
   });
 });

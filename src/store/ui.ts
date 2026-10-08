@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-import type { Person } from '@/domain/split';
+import { NO_SPLIT_FILTER, type Person, type SplitFilter } from '@/domain/split';
 import { monthKeyOf, shiftMonth, todayISO, type MonthKey } from '@/domain/dates';
 
 /**
@@ -14,6 +14,9 @@ interface UiState {
   /** Pre-selects "Paid by" on the next new expense. */
   lastPaidBy: Person;
   setLastPaidBy: (person: Person) => void;
+  /** Who paid / who it was for, on the Expenses tab. Kept here so it survives switching tabs. */
+  expenseFilter: SplitFilter;
+  setExpenseFilter: (filter: Partial<SplitFilter>) => void;
 }
 
 export const useUiStore = create<UiState>((set) => ({
@@ -22,4 +25,6 @@ export const useUiStore = create<UiState>((set) => ({
   shiftSelectedMonth: (delta) => set((s) => ({ selectedMonth: shiftMonth(s.selectedMonth, delta) })),
   lastPaidBy: 'sergio',
   setLastPaidBy: (person) => set({ lastPaidBy: person }),
+  expenseFilter: NO_SPLIT_FILTER,
+  setExpenseFilter: (filter) => set((s) => ({ expenseFilter: { ...s.expenseFilter, ...filter } })),
 }));
