@@ -7,7 +7,17 @@ import { MonthSwitcher } from '@/components/month-switcher';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { splitLabel } from '@/components/split-label';
-import { Card, Chips, EmptyState, Fab, Money, Screen, SectionLabel, Title } from '@/components/ui';
+import {
+  Card,
+  Chips,
+  EmptyState,
+  Fab,
+  Money,
+  Screen,
+  SectionLabel,
+  SettingsFab,
+  Title,
+} from '@/components/ui';
 import { listCategories } from '@/db/repositories/categories';
 import { listExpenses } from '@/db/repositories/expenses';
 import { listIncomes } from '@/db/repositories/incomes';
@@ -208,6 +218,7 @@ export default function ExpensesScreen() {
           </View>
         ))}
       </Screen>
+      <SettingsFab />
       <Fab
         label="Add expense"
         onPress={() =>

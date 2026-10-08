@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import type { ReactNode } from 'react';
 import {
   Pressable,
@@ -247,6 +248,27 @@ export function Fab({ onPress, label }: { onPress: () => void; label: string }) 
   );
 }
 
+/**
+ * The round settings button in the bottom-left corner of the main tabs, mirroring the "+" on the
+ * right. Opens Settings and backup.
+ */
+export function SettingsFab() {
+  const theme = useTheme();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Settings and backup"
+      onPress={() => router.push('/settings')}
+      style={({ pressed }) => [
+        styles.fab,
+        styles.fabLeft,
+        { backgroundColor: theme.backgroundElement, borderColor: theme.separator, opacity: pressed ? 0.8 : 1 },
+      ]}>
+      <ThemedText style={[styles.fabGear, { color: theme.text }]}>⚙︎</ThemedText>
+    </Pressable>
+  );
+}
+
 export function EmptyState({ title, body }: { title: string; body: string }) {
   return (
     <Card style={{ alignItems: 'center', gap: Spacing.two, paddingVertical: Spacing.five }}>
@@ -288,5 +310,8 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 },
   },
+  // Same size and height as the "+", on the other side.
+  fabLeft: { right: undefined, left: Spacing.four, borderWidth: StyleSheet.hairlineWidth },
+  fabGear: { fontSize: 28, lineHeight: 32 },
   fabText: { color: '#ffffff', fontSize: 34, lineHeight: 38, fontWeight: 400 },
 });

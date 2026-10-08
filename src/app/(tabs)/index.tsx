@@ -15,6 +15,7 @@ import {
   ProgressBar,
   Screen,
   SectionLabel,
+  SettingsFab,
   StatusPill,
   Title,
   useStatusColor,
@@ -95,9 +96,8 @@ export default function MonthScreen() {
             <Button title="Edit plan" variant="secondary" onPress={() => router.push('/plan')} />
           </>
         ) : null}
-
-        <Button title="Settings and backup" variant="secondary" onPress={() => router.push('/settings')} />
       </Screen>
+      <SettingsFab />
       <Fab label="Add expense" onPress={() => router.push('/expense')} />
     </ThemedView>
   );

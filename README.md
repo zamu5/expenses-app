@@ -96,7 +96,7 @@ nothing of one that was only for the other person, whoever paid. A 83.34 shared 
 budget leaves 58.33.
 
 The math is in `src/domain/split.ts`. The two names are set in the app, under **Settings and
-backup** on the Month tab; the first one is whose budget and accounts the app tracks.
+backup** (the round button at the bottom left); the first one is whose budget and accounts the app tracks.
 
 ## Income
 
@@ -144,7 +144,7 @@ The math is in `src/domain/accounts.ts`.
 ## Backup and restore
 
 The data lives only on the device (or, on the web, in that browser for that exact address), so
-make backups. **Backup and restore** at the bottom of the Month tab exports everything to one file,
+make backups. The round settings button at the bottom left of the main tabs opens **Settings and backup**, which exports everything to one file,
 `expenses-backup-YYYY-MM-DD.json`: on the iPhone through the share sheet (save it to Files or
 iCloud Drive), on the web as a download.
 
