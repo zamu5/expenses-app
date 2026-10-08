@@ -1,11 +1,11 @@
 import { useSQLiteContext } from 'expo-sqlite';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Alert, StyleSheet, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { Button, Card, Field, Money, Screen, SectionLabel } from '@/components/ui';
-import { listCategories } from '@/db/repositories/categories';
+import { Button, Card, Chips, Field, Money, Screen, SectionLabel, ToggleRow } from '@/components/ui';
+import { createCategory, listCategories, listCategoriesForMonth } from '@/db/repositories/categories';
 import { getBudgets, getMonth, getPreviousPlan, saveMonthPlan } from '@/db/repositories/months';
 import type { Category } from '@/db/types';
 import { formatMonth, type MonthKey } from '@/domain/dates';
@@ -17,18 +17,32 @@ import { useUiStore } from '@/store/ui';
 /**
  * Starting balance + one budget per category for the selected month.
  * A month that was never planned is pre-filled from the most recent planned month.
+ * Categories can be added to or removed from this month only, which is how categories
+ * that are not monthly (insurance, holidays) come and go.
  */
 export default function PlanScreen() {
   const month = useUiStore((s) => s.selectedMonth);
   const { data } = useDbQuery(
     async (db) => {
-      const [existing, categories] = await Promise.all([getMonth(db, month), listCategories(db)]);
+      const [existing, categories, inMonth] = await Promise.all([
+        getMonth(db, month),
+        listCategories(db),
+        listCategoriesForMonth(db, month),
+      ]);
+      const inMonthIds = inMonth.map((c) => c.id);
       if (existing) {
-        return { categories, startingCents: existing.startingBalanceCents, budgets: await getBudgets(db, month), copiedFrom: null };
+        return {
+          categories,
+          inMonthIds,
+          startingCents: existing.startingBalanceCents,
+          budgets: await getBudgets(db, month),
+          copiedFrom: null,
+        };
       }
       const previous = await getPreviousPlan(db, month);
       return {
         categories,
+        inMonthIds,
         startingCents: null,
         budgets: previous?.budgets ?? {},
         copiedFrom: previous?.month.monthKey ?? null,
@@ -44,12 +58,15 @@ export default function PlanScreen() {
 function PlanForm({
   month,
   categories,
+  inMonthIds,
   startingCents,
   budgets,
   copiedFrom,
 }: {
   month: MonthKey;
+  /** Every active category; `inMonthIds` are the ones in this month's plan when the form opened. */
   categories: Category[];
+  inMonthIds: string[];
   startingCents: number | null;
   budgets: Record<string, number>;
   copiedFrom: MonthKey | null;
@@ -65,11 +82,19 @@ function PlanForm({
     ),
   );
 
+  const [includedIds, setIncludedIds] = useState(inMonthIds);
+  const [newName, setNewName] = useState('');
+  const [newIsMonthly, setNewIsMonthly] = useState(false);
+
+  const included = categories.filter((c) => includedIds.includes(c.id));
+  const available = categories.filter((c) => !includedIds.includes(c.id));
+  const budgetText = (id: string) => budgetTexts[id] ?? '';
+
   const starting = parseAmountToCents(startingText);
   // An empty budget field means 0.
-  const parsedBudgets = categories.map((c) => ({
+  const parsedBudgets = included.map((c) => ({
     categoryId: c.id,
-    amountCents: budgetTexts[c.id].trim() === '' ? 0 : parseAmountToCents(budgetTexts[c.id]),
+    amountCents: budgetText(c.id).trim() === '' ? 0 : parseAmountToCents(budgetText(c.id)),
   }));
   const invalid = starting === null || parsedBudgets.some((b) => b.amountCents === null);
   const totalBudget = parsedBudgets.reduce((sum, b) => sum + (b.amountCents ?? 0), 0);
@@ -81,10 +106,25 @@ function PlanForm({
         month,
         startingBalanceCents: starting,
         budgets: parsedBudgets.map((b) => ({ categoryId: b.categoryId, amountCents: b.amountCents ?? 0 })),
+        // Only categories that would otherwise be in this month need to be recorded as removed.
+        removedCategoryIds: available
+          .filter((c) => c.isMonthly || inMonthIds.includes(c.id))
+          .map((c) => c.id),
       });
       router.back();
     } catch (e) {
       Alert.alert('Could not save', e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  async function addNewCategory() {
+    if (newName.trim() === '') return;
+    try {
+      const id = await createCategory(db, { name: newName, isFixed: false, isMonthly: newIsMonthly });
+      setIncludedIds((prev) => [...prev, id]);
+      setNewName('');
+    } catch (e) {
+      Alert.alert('Could not add', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -110,7 +150,12 @@ function PlanForm({
 
       <SectionLabel>Budget per category</SectionLabel>
       <Card style={{ gap: 0, paddingVertical: 4 }}>
-        {categories.map((c, i) => (
+        {included.length === 0 ? (
+          <ThemedText type="small" themeColor="textSecondary" style={{ paddingVertical: 12 }}>
+            No categories in this month yet. Add one below.
+          </ThemedText>
+        ) : null}
+        {included.map((c, i) => (
           <View
             key={c.id}
             style={[
@@ -120,15 +165,46 @@ function PlanForm({
             <ThemedText style={{ flex: 1 }}>{c.name}</ThemedText>
             <Field
               label=""
-              value={budgetTexts[c.id]}
+              value={budgetText(c.id)}
               onChangeText={(text) => setBudgetTexts((prev) => ({ ...prev, [c.id]: text }))}
               keyboardType="decimal-pad"
               placeholder="0.00"
               style={styles.budgetInput}
             />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Remove ${c.name} from this month`}
+              hitSlop={12}
+              onPress={() => setIncludedIds((prev) => prev.filter((id) => id !== c.id))}>
+              <ThemedText style={{ color: theme.critical, fontSize: 22 }}>×</ThemedText>
+            </Pressable>
           </View>
         ))}
       </Card>
+      <ThemedText type="small" themeColor="textSecondary">
+        × takes a category out of {formatMonth(month)} only. It stays in your other months.
+      </ThemedText>
+
+      <SectionLabel>Add a category to this month</SectionLabel>
+      {available.length > 0 ? (
+        <Chips
+          options={available.map((c) => ({ value: c.id, label: `+ ${c.name}` }))}
+          value={null}
+          onChange={(id) => setIncludedIds((prev) => [...prev, id])}
+        />
+      ) : null}
+      <Field label="New category" value={newName} onChangeText={setNewName} placeholder="Car insurance" />
+      {newName.trim() !== '' ? (
+        <>
+          <ToggleRow
+            label="Every month"
+            hint="Off: it is only in this month, until you add it to another one."
+            value={newIsMonthly}
+            onValueChange={setNewIsMonthly}
+          />
+          <Button title={`Add ${newName.trim()}`} variant="secondary" onPress={addNewCategory} />
+        </>
+      ) : null}
 
       <Card>
         <View style={styles.total}>

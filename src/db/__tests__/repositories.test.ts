@@ -2,12 +2,14 @@
  * @jest-environment node
  */
 import { computeMonthSummary } from '@/domain/budget';
+import { balanceCents } from '@/domain/split';
 
 import { subscribeToDataChanges } from '../events';
 import { LATEST_SCHEMA_VERSION, migrate } from '../migrations';
 import {
   createCategory,
   listCategories,
+  listCategoriesForMonth,
   setCategoryArchived,
 } from '../repositories/categories';
 import { addExpense, deleteExpense, listExpenses, updateExpense } from '../repositories/expenses';
@@ -19,6 +21,12 @@ import {
   saveMonthPlan,
   setBudget,
 } from '../repositories/months';
+import {
+  addSettlement,
+  deleteSettlement,
+  getSplitTotals,
+  listSettlements,
+} from '../repositories/settlements';
 import type { Db } from '../types';
 import { createTestDb } from './node-db';
 
@@ -152,5 +160,75 @@ describe('month plans', () => {
     await createCategory(db, { name: ' Pets ', isFixed: false });
     const all = await listCategories(db);
     expect(all.at(-1)?.name).toBe('Pets');
+  });
+});
+
+describe('categories that are not monthly', () => {
+  const namesIn = async (month: string) => (await listCategoriesForMonth(db, month)).map((c) => c.name);
+  const plan = (month: string, budgets: { categoryId: string; amountCents: number }[], removed: string[] = []) =>
+    saveMonthPlan(db, { month, startingBalanceCents: 1000, budgets, removedCategoryIds: removed });
+
+  it('are only in the months they were added to', async () => {
+    const insurance = await createCategory(db, { name: 'Insurance', isFixed: true, isMonthly: false });
+    expect(await namesIn('2026-10')).not.toContain('Insurance');
+
+    await plan('2026-10', [{ categoryId: insurance, amountCents: 60000 }]);
+    expect(await namesIn('2026-10')).toContain('Insurance');
+    expect(await namesIn('2026-11')).not.toContain('Insurance');
+    expect((await getMonthCategoryInputs(db, '2026-10')).find((c) => c.id === insurance)?.budgetCents).toBe(60000);
+    expect((await getMonthCategoryInputs(db, '2026-11')).some((c) => c.id === insurance)).toBe(false);
+  });
+
+  it('a monthly category can be removed from one month and added back', async () => {
+    const fun = await idOf('Fun');
+    await plan('2026-10', [{ categoryId: fun, amountCents: 5000 }]);
+    await plan('2026-10', [], [fun]);
+    expect(await namesIn('2026-10')).not.toContain('Fun');
+    expect(await namesIn('2026-11')).toContain('Fun');
+    expect(await getBudgets(db, '2026-10')).toEqual({});
+    expect((await getMonthCategoryInputs(db, '2026-10')).some((c) => c.id === fun)).toBe(false);
+
+    await plan('2026-10', [{ categoryId: fun, amountCents: 7000 }]);
+    expect(await namesIn('2026-10')).toContain('Fun');
+    expect(await getBudgets(db, '2026-10')).toEqual({ [fun]: 7000 });
+  });
+
+  it('a removed category still shows when money was spent on it', async () => {
+    const fun = await idOf('Fun');
+    await plan('2026-10', [], [fun]);
+    await addExpense(db, { categoryId: fun, amountCents: 900, spentOn: '2026-10-03' });
+    const row = (await getMonthCategoryInputs(db, '2026-10')).find((c) => c.id === fun);
+    expect(row).toMatchObject({ budgetCents: 0, spentCents: 900 });
+  });
+});
+
+describe('who owes whom', () => {
+  it('stores who paid and who it was for', async () => {
+    const fun = await idOf('Fun');
+    const id = await addExpense(db, { categoryId: fun, amountCents: 100, spentOn: '2026-10-01', paidBy: 'adriana', forWhom: 'sergio' });
+    expect((await listExpenses(db, '2026-10'))[0]).toMatchObject({ paidBy: 'adriana', forWhom: 'sergio' });
+    await updateExpense(db, id, { categoryId: fun, amountCents: 100, spentOn: '2026-10-01', paidBy: 'sergio', forWhom: 'shared' });
+    expect((await listExpenses(db, '2026-10'))[0]).toMatchObject({ paidBy: 'sergio', forWhom: 'shared' });
+  });
+
+  it('adds up across months and returns to zero after settling', async () => {
+    const fun = await idOf('Fun');
+    const add = (amountCents: number, spentOn: string, paidBy: 'sergio' | 'adriana', forWhom: 'shared' | 'sergio' | 'adriana') =>
+      addExpense(db, { categoryId: fun, amountCents, spentOn, paidBy, forWhom });
+    await add(10000, '2026-09-10', 'sergio', 'shared'); // Adriana owes 5000
+    await add(4000, '2026-10-02', 'adriana', 'shared'); // Sergio owes 2000
+    await add(1500, '2026-10-03', 'sergio', 'adriana'); // Adriana owes 1500
+    await add(9900, '2026-10-04', 'sergio', 'sergio'); // nobody owes anything
+    const deleted = await add(7000, '2026-10-05', 'adriana', 'sergio');
+    await deleteExpense(db, deleted);
+    expect(balanceCents(await getSplitTotals(db))).toBe(4500);
+
+    const wrong = await addSettlement(db, { fromPerson: 'adriana', amountCents: 1, settledOn: '2026-10-06' });
+    await deleteSettlement(db, wrong);
+    await addSettlement(db, { fromPerson: 'adriana', amountCents: 4500, settledOn: '2026-10-06' });
+    expect(balanceCents(await getSplitTotals(db))).toBe(0);
+    expect(await listSettlements(db)).toEqual([
+      expect.objectContaining({ fromPerson: 'adriana', toPerson: 'sergio', amountCents: 4500 }),
+    ]);
   });
 });

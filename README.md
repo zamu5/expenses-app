@@ -77,6 +77,21 @@ Rules that keep it healthy:
   so it is fully unit tested.
 - **Schema changes are new migrations.** Never edit a migration that has shipped; append one.
 
+## Categories that are not monthly
+
+A category marked "Every month" is in every month's plan. Turn that off for things like insurance
+or holidays: they only appear in the months you add them to, from **Plan month**. The × next to a
+category in the plan takes it out of that month only.
+
+## Who paid, and who owes whom
+
+Every expense records who paid and who it was for: shared 50/50, or only one of you. From that the
+app keeps a running balance across all months ("Adriana owes Sergio $40"), shown at the top of the
+Month tab. Tap it to see where the number comes from and to record a payment that settles it.
+Budgets still count the full amount of every expense, whoever paid.
+
+The math is in `src/domain/split.ts`. The two names are `PEOPLE` in `src/config.ts`.
+
 ## Changing the currency
 
 Edit `CURRENCY` in `src/config.ts` (for example `'EUR'` or `'COP'`).

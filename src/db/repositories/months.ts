@@ -52,6 +52,8 @@ export interface MonthPlan {
   month: MonthKey;
   startingBalanceCents: number;
   budgets: { categoryId: string; amountCents: number }[];
+  /** Categories taken out of this month only. They stay available for other months. */
+  removedCategoryIds?: string[];
 }
 
 /** Creates or updates a month and all its budgets in one transaction: all of it is saved, or none. */
@@ -80,6 +82,19 @@ export async function saveMonthPlan(db: Db, plan: MonthPlan): Promise<void> {
         [newId(), month.id, b.categoryId, b.amountCents, now, now],
       );
     }
+
+    // A soft-deleted budget row is what records "not in this month" (see listCategoriesForMonth).
+    for (const categoryId of plan.removedCategoryIds ?? []) {
+      await db.runAsync(
+        `INSERT INTO category_budgets
+           (id, month_id, category_id, amount_cents, created_at, updated_at, deleted_at)
+         VALUES (?, ?, ?, 0, ?, ?, ?)
+         ON CONFLICT (month_id, category_id) DO UPDATE SET
+           updated_at = excluded.updated_at,
+           deleted_at = excluded.deleted_at`,
+        [newId(), month.id, categoryId, now, now, now],
+      );
+    }
   });
   notifyDataChanged();
 }
@@ -101,8 +116,9 @@ export async function setBudget(
 }
 
 /**
- * Everything the Month screen needs, ready for computeMonthSummary(): every active category,
- * plus archived ones that still have a budget or spending this month.
+ * Everything the Month screen needs, ready for computeMonthSummary(): the categories in this
+ * month's plan (see listCategoriesForMonth), plus any other category with spending this month,
+ * so money is never hidden.
  * The database does the summing (SUM + GROUP BY); totals are never stored.
  */
 export async function getMonthCategoryInputs(db: Db, month: MonthKey): Promise<CategoryInput[]> {
@@ -114,13 +130,13 @@ export async function getMonthCategoryInputs(db: Db, month: MonthKey): Promise<C
     spent_cents: number | null;
   }>(
     `SELECT c.id, c.name, c.is_fixed,
-            b.amount_cents AS budget_cents,
+            CASE WHEN b.deleted_at IS NULL THEN b.amount_cents END AS budget_cents,
             s.spent_cents
      FROM categories c
      LEFT JOIN (
-       SELECT b.category_id, b.amount_cents FROM category_budgets b
+       SELECT b.category_id, b.amount_cents, b.deleted_at FROM category_budgets b
        JOIN months m ON m.id = b.month_id
-       WHERE m.month_key = ? AND b.deleted_at IS NULL
+       WHERE m.month_key = ?
      ) b ON b.category_id = c.id
      LEFT JOIN (
        SELECT category_id, SUM(amount_cents) AS spent_cents FROM expenses
@@ -128,7 +144,10 @@ export async function getMonthCategoryInputs(db: Db, month: MonthKey): Promise<C
        GROUP BY category_id
      ) s ON s.category_id = c.id
      WHERE c.deleted_at IS NULL
-       AND (c.archived_at IS NULL OR b.amount_cents > 0 OR s.spent_cents > 0)
+       AND (s.spent_cents > 0
+         OR (b.category_id IS NOT NULL AND b.deleted_at IS NULL
+             AND (c.archived_at IS NULL OR b.amount_cents > 0))
+         OR (b.category_id IS NULL AND c.is_monthly = 1 AND c.archived_at IS NULL))
      ORDER BY c.sort_order, c.name`,
     [month, `${month}-%`],
   );
