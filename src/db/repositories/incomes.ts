@@ -1,9 +1,8 @@
 import type { MonthKey } from '@/domain/dates';
-import type { ForWhom } from '@/domain/split';
+import { DEFAULT_OWNER_SHARE_PCT, type ForWhom } from '@/domain/split';
 import { newId, nowISO } from '@/lib/id';
 
 import { notifyDataChanged } from '../events';
-import { getOwnerSharePct } from './settings';
 import type { Db, Income } from '../types';
 
 interface IncomeRow {
@@ -40,7 +39,7 @@ export interface IncomeInput {
   forWhom?: ForWhom;
   /** The account the money went into. Its balance goes up by the amount. */
   accountId?: string | null;
-  /** The owner's share of a shared refund, 0-100. Left out: the current setting, or what it had. */
+  /** The owner's share of a shared refund, 0-100. Left out: half and half, or what it had. */
   ownerSharePct?: number;
 }
 
@@ -73,7 +72,7 @@ export async function addIncome(db: Db, input: IncomeInput): Promise<string> {
         input.categoryId ?? null,
         input.forWhom ?? 'sergio',
         input.accountId ?? null,
-        input.ownerSharePct ?? (await getOwnerSharePct(db)),
+        input.ownerSharePct ?? DEFAULT_OWNER_SHARE_PCT,
         now,
         now,
       ],

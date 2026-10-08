@@ -1,9 +1,8 @@
 import type { MonthKey } from '@/domain/dates';
-import type { ForWhom, Person } from '@/domain/split';
+import { DEFAULT_OWNER_SHARE_PCT, type ForWhom, type Person } from '@/domain/split';
 import { newId, nowISO } from '@/lib/id';
 
 import { notifyDataChanged } from '../events';
-import { getOwnerSharePct } from './settings';
 import type { Db, Expense } from '../types';
 
 interface ExpenseRow {
@@ -48,8 +47,8 @@ export interface ExpenseInput {
    */
   paymentAccountId?: string | null;
   /**
-   * The owner's share of a shared expense, 0-100. Left out, a new expense takes the current
-   * setting and an edited one keeps what it had.
+   * The owner's share of a shared expense, 0-100, chosen on the expense form. Left out, a new
+   * expense is half and half and an edited one keeps what it had.
    */
   ownerSharePct?: number;
 }
@@ -86,7 +85,7 @@ async function insertExpense(db: Db, input: ExpenseInput): Promise<string> {
       input.paidBy ?? 'sergio',
       input.forWhom ?? 'shared',
       input.paymentAccountId ?? null,
-      input.ownerSharePct ?? (await getOwnerSharePct(db)),
+      input.ownerSharePct ?? DEFAULT_OWNER_SHARE_PCT,
       now,
       now,
     ],

@@ -6,14 +6,13 @@ import { ThemedText } from '@/components/themed-text';
 import { Button, Card, Field, Screen, SectionLabel } from '@/components/ui';
 import { LATEST_SCHEMA_VERSION } from '@/db/migrations';
 import { exportBackup, getLastBackupAt, restoreBackup, setLastBackupAt } from '@/db/repositories/backup';
-import { setOwnerSharePct, setPeopleNames, type PeopleNames } from '@/db/repositories/settings';
-import { parseSharePct } from '@/domain/split';
+import { setPeopleNames, type PeopleNames } from '@/db/repositories/settings';
 import { backupFileName, parseBackup, summarizeBackup, type Backup } from '@/domain/backup';
 import { todayISO } from '@/domain/dates';
 import { useDbQuery } from '@/hooks/use-db-query';
 import { useTheme } from '@/hooks/use-theme';
 import { pickBackupFile, saveBackupFile } from '@/lib/backup-file';
-import { splitRatioLabel, useOwnerSharePct, usePeople } from '@/store/people';
+import { usePeople } from '@/store/people';
 
 const formatWhen = (iso: string) =>
   new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(iso));
@@ -23,7 +22,6 @@ export default function SettingsScreen() {
   const db = useSQLiteContext();
   const theme = useTheme();
   const people = usePeople();
-  const ownerSharePct = useOwnerSharePct();
   const { data: lastBackupAt } = useDbQuery(getLastBackupAt, []);
   const [message, setMessage] = useState<{ text: string; isError: boolean } | null>(null);
   // A picked backup waits here until the user confirms replacing everything.
@@ -86,7 +84,6 @@ export default function SettingsScreen() {
       <SectionLabel>People</SectionLabel>
       {/* The key resets the fields when the saved names change, e.g. after restoring a backup. */}
       <PeopleNamesEditor key={`${people.sergio}|${people.adriana}`} names={people} />
-      <ShareEditor key={ownerSharePct} ownerSharePct={ownerSharePct} names={people} />
 
       <SectionLabel>Backup</SectionLabel>
       <ThemedText type="small" themeColor="textSecondary">
@@ -164,33 +161,6 @@ function PeopleNamesEditor({ names }: { names: PeopleNames }) {
           onPress={() => setPeopleNames(db, { sergio: first, adriana: second })}
           disabled={!valid}
         />
-      ) : null}
-    </View>
-  );
-}
-
-/** How a shared expense is divided: the first person's share, in percent. */
-function ShareEditor({ ownerSharePct, names }: { ownerSharePct: number; names: PeopleNames }) {
-  const db = useSQLiteContext();
-  const [text, setText] = useState(String(ownerSharePct));
-  const pct = parseSharePct(text);
-
-  return (
-    <View style={{ gap: 8 }}>
-      <Field
-        label={`${names.sergio}'s share of a shared expense (%)`}
-        value={text}
-        onChangeText={setText}
-        keyboardType="number-pad"
-        maxLength={3}
-      />
-      <ThemedText type="small" themeColor="textSecondary">
-        {pct === null
-          ? 'Type a whole number from 0 to 100.'
-          : `${names.sergio} ${pct}%, ${names.adriana} ${100 - pct}% (${splitRatioLabel(pct)}). Applies to new shared expenses only; the ones already logged keep the split they had.`}
-      </ThemedText>
-      {pct !== null && pct !== ownerSharePct ? (
-        <Button title="Save split" onPress={() => setOwnerSharePct(db, pct)} />
       ) : null}
     </View>
   );

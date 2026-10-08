@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Alert, StyleSheet, View } from 'react-native';
 
 import { DateField } from '@/components/date-field';
+import { ShareField } from '@/components/share-field';
 import { ThemedText } from '@/components/themed-text';
 import { Button, Chips, Field, Screen, SectionLabel } from '@/components/ui';
 import { CURRENCY } from '@/config';
@@ -19,18 +20,24 @@ import {
 import type { Account, Category, Expense } from '@/db/types';
 import { monthKeyOf, todayISO } from '@/domain/dates';
 import { centsToInputText, parseAmountToCents, splitOffPart } from '@/domain/money';
-import { BUDGET_OWNER, type ForWhom, type Person } from '@/domain/split';
+import {
+  BUDGET_OWNER,
+  DEFAULT_OWNER_SHARE_PCT,
+  parseSharePct,
+  type ForWhom,
+  type Person,
+} from '@/domain/split';
 import { useDbQuery } from '@/hooks/use-db-query';
 import { useTheme } from '@/hooks/use-theme';
 import { confirmDestructive } from '@/lib/confirm';
 import { useUiStore } from '@/store/ui';
 import type { PeopleNames } from '@/db/repositories/settings';
-import { splitRatioLabel, useOwnerSharePct, usePeople } from '@/store/people';
+import { usePeople } from '@/store/people';
 
 const NO_METHOD = 'none';
 
-const forWhomOptions = (people: PeopleNames, ownerSharePct: number): { value: ForWhom; label: string }[] => [
-  { value: 'shared', label: `Shared ${splitRatioLabel(ownerSharePct)}` },
+const forWhomOptions = (people: PeopleNames): { value: ForWhom; label: string }[] => [
+  { value: 'shared', label: 'Shared' },
   { value: 'sergio', label: `Only ${people.sergio}` },
   { value: 'adriana', label: `Only ${people.adriana}` },
 ];
@@ -74,9 +81,7 @@ function ExpenseForm({
   initialCategoryId?: string;
 }) {
   const people = usePeople();
-  // An expense being edited shows the split it was logged with; a new one, the current setting.
-  const currentSharePct = useOwnerSharePct();
-  const FOR_WHOM = forWhomOptions(people, expense?.ownerSharePct ?? currentSharePct);
+  const FOR_WHOM = forWhomOptions(people);
   const db = useSQLiteContext();
   const theme = useTheme();
   const selectedMonth = useUiStore((s) => s.selectedMonth);
@@ -95,6 +100,10 @@ function ExpenseForm({
   const [note, setNote] = useState(expense?.note ?? '');
   const [paidBy, setPaidBy] = useState<Person>(expense?.paidBy ?? lastPaidBy);
   const [forWhom, setForWhom] = useState<ForWhom>(expense?.forWhom ?? 'shared');
+  // How a shared expense is divided: half and half unless changed here. An expense being edited
+  // shows the split it was saved with.
+  const [shareText, setShareText] = useState(String(expense?.ownerSharePct ?? DEFAULT_OWNER_SHARE_PCT));
+  const sharePct = parseSharePct(shareText);
   // A new expense starts on the default payment method, if one is set.
   const [paymentAccountId, setPaymentAccountId] = useState<string | null>(
     expense ? expense.paymentAccountId : (methods.find((m) => m.isPaymentDefault)?.id ?? null),
@@ -112,9 +121,16 @@ function ExpenseForm({
   const part =
     partOpen && amountCents !== null && partCents !== null ? splitOffPart(amountCents, partCents) : null;
   // With the split open, both its amount and its category must be valid before saving.
+  const usesShare = forWhom === 'shared' || (partOpen && (partForWhom ?? forWhom) === 'shared');
   const partReady = !partOpen || (part !== null && partCategoryId !== null && partCategoryId !== categoryId);
   const canSave =
-    amountCents !== null && amountCents > 0 && categoryId !== null && partReady && !saving;
+    amountCents !== null &&
+    amountCents > 0 &&
+    categoryId !== null &&
+    partReady &&
+    // The split only matters, and is only shown, when something in this expense is shared.
+    (!usesShare || sharePct !== null) &&
+    !saving;
 
   // The picker offers the categories in the plan of the month the expense falls in,
   // plus the one already selected (it may be archived, or not part of that month).
@@ -141,6 +157,8 @@ function ExpenseForm({
       forWhom,
       // Only the owner's own accounts and cards are tracked.
       paymentAccountId: paidBy === BUDGET_OWNER ? paymentAccountId : null,
+      // Left out when nothing is shared, so an edited expense keeps the split it had.
+      ownerSharePct: usesShare && sharePct !== null ? sharePct : undefined,
     };
     try {
       if (part && partCategoryId) {
@@ -237,36 +255,37 @@ function ExpenseForm({
         <Button title="Split with another category" variant="secondary" onPress={() => setPartOpen(true)} />
       )}
 
-      <SectionLabel>Paid by</SectionLabel>
-      <Chips
-        options={[
-          { value: 'sergio', label: people.sergio },
-          { value: 'adriana', label: people.adriana },
-        ]}
-        value={paidBy}
-        onChange={setPaidBy}
-      />
-
-      {paidBy === BUDGET_OWNER && methods.length > 0 ? (
-        <>
-          <SectionLabel>Paid with</SectionLabel>
+      {/* Who paid and what with, side by side. "Paid with" is only for the owner's own money. */}
+      <View style={styles.payRow}>
+        <View style={styles.payColumn}>
+          <SectionLabel>Paid by</SectionLabel>
           <Chips
             options={[
-              ...methods.map((m) => ({ value: m.id, label: m.linkedAccountId ? `${m.name} (card)` : m.name })),
-              { value: NO_METHOD, label: 'Not tracked' },
+              { value: 'sergio', label: people.sergio },
+              { value: 'adriana', label: people.adriana },
             ]}
-            value={paymentAccountId ?? NO_METHOD}
-            onChange={(value) => setPaymentAccountId(value === NO_METHOD ? null : value)}
+            value={paidBy}
+            onChange={setPaidBy}
           />
-        </>
-      ) : null}
+        </View>
+        {paidBy === BUDGET_OWNER && methods.length > 0 ? (
+          <View style={styles.payColumn}>
+            <SectionLabel>Paid with</SectionLabel>
+            <Chips
+              options={[
+                ...methods.map((m) => ({ value: m.id, label: m.linkedAccountId ? `${m.name} (card)` : m.name })),
+                { value: NO_METHOD, label: 'Not tracked' },
+              ]}
+              value={paymentAccountId ?? NO_METHOD}
+              onChange={(value) => setPaymentAccountId(value === NO_METHOD ? null : value)}
+            />
+          </View>
+        ) : null}
+      </View>
 
       <SectionLabel>For</SectionLabel>
-      <Chips
-        options={FOR_WHOM}
-        value={forWhom}
-        onChange={setForWhom}
-      />
+      <Chips options={FOR_WHOM} value={forWhom} onChange={setForWhom} />
+      {usesShare ? <ShareField value={shareText} onChange={setShareText} people={people} /> : null}
 
       <SectionLabel>Date</SectionLabel>
       <DateField value={spentOn} onChange={setSpentOn} />
@@ -282,5 +301,7 @@ function ExpenseForm({
 }
 
 const styles = StyleSheet.create({
+  payRow: { flexDirection: 'row', gap: 16 },
+  payColumn: { flex: 1, gap: 8 },
   amount: { fontSize: 34, fontWeight: 600, paddingVertical: 16 },
 });

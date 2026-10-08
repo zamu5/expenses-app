@@ -5,7 +5,7 @@ import { useEffect } from 'react';
 import { useColorScheme } from 'react-native';
 
 import { migrate } from '@/db/migrations';
-import { getOwnerSharePct, getPeopleNames } from '@/db/repositories/settings';
+import { getPeopleNames } from '@/db/repositories/settings';
 import { useDbQuery } from '@/hooks/use-db-query';
 import { usePeopleStore } from '@/store/people';
 
@@ -19,16 +19,13 @@ function HideSplash() {
   return null;
 }
 
-/** Keeps the names and the split setting in the store in step with the database. */
+/** Keeps the two display names in the store in step with the database. */
 function PeopleLoader() {
-  const { data } = useDbQuery(
-    async (db) => ({ names: await getPeopleNames(db), ownerSharePct: await getOwnerSharePct(db) }),
-    [],
-  );
-  const set = usePeopleStore((s) => s.set);
+  const { data } = useDbQuery(getPeopleNames, []);
+  const setNames = usePeopleStore((s) => s.setNames);
   useEffect(() => {
-    if (data) set(data);
-  }, [data, set]);
+    if (data) setNames(data);
+  }, [data, setNames]);
   return null;
 }
 
