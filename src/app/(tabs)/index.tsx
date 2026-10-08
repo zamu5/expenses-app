@@ -53,13 +53,22 @@ export default function MonthScreen() {
         {data?.month ? (
           <>
             <BalanceCard
-              startingCents={data.month.startingBalanceCents}
+              startingCents={overview?.startedWithCents ?? 0}
               incomeCents={data.summary.totalIncomeCents}
               currentCents={overview?.netWorth.totalHomeCents ?? 0}
               missingRates={overview?.netWorth.missingRates ?? []}
               budgetAccountCents={overview?.budgetAccountCents ?? 0}
-              plannedCents={data.summary.plannedEndCents}
-              projectedCents={data.summary.projectedEndCents}
+              // The summary's ends are for the budget account alone; shift them to cover all accounts.
+              plannedCents={
+                data.summary.plannedEndCents +
+                (overview?.startedWithCents ?? 0) -
+                data.month.startingBalanceCents
+              }
+              projectedCents={
+                data.summary.projectedEndCents +
+                (overview?.startedWithCents ?? 0) -
+                data.month.startingBalanceCents
+              }
               status={data.summary.status}
               isEarly={data.summary.isEarlyEstimate}
               daysElapsed={data.daysElapsed}
@@ -83,6 +92,7 @@ export default function MonthScreen() {
 }
 
 function BalanceCard(props: {
+  /** All accounts at the start: other accounts + the budget account's start - planned expenses. */
   startingCents: number;
   incomeCents: number;
   /** The Accounts tab total: every account, what is owed, minus planned expenses and what is left to spend. */

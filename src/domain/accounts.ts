@@ -72,6 +72,27 @@ export function computeNetWorth(
   };
 }
 
+/**
+ * What a month started with across everything: every account except the budget account, plus the
+ * budget account's starting balance from the month's plan, minus planned expenses.
+ * Returns a NetWorth so currencies without a rate are flagged the same way as in the total.
+ */
+export function computeStartedWith(
+  accounts: (NetWorthItem & { isBudgetAccount: boolean })[],
+  budgetStartCents: Cents,
+  rates: Record<string, number>,
+  homeCurrency: string,
+): NetWorth {
+  return computeNetWorth(
+    [
+      ...accounts.filter((a) => !a.isBudgetAccount),
+      { kind: 'account', currency: homeCurrency, balanceCents: budgetStartCents },
+    ],
+    rates,
+    homeCurrency,
+  );
+}
+
 /** Cleans what the user typed into an ISO 4217 code, or null when it is not three letters. */
 export function parseCurrencyCode(input: string): string | null {
   const code = input.trim().toUpperCase();

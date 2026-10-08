@@ -1,4 +1,4 @@
-import { computeNetWorth, parseCurrencyCode, toHomeCents } from './accounts';
+import { computeNetWorth, computeStartedWith, parseCurrencyCode, toHomeCents } from './accounts';
 
 describe('toHomeCents', () => {
   it('converts with a typed rate and rounds to the cent', () => {
@@ -81,5 +81,31 @@ describe('parseCurrencyCode', () => {
     expect(parseCurrencyCode('')).toBeNull();
     expect(parseCurrencyCode('pesos')).toBeNull();
     expect(parseCurrencyCode('C$')).toBeNull();
+  });
+});
+
+describe('computeStartedWith', () => {
+  const accounts = [
+    // The budget account's own balance is ignored: the month's starting balance is used instead.
+    { kind: 'account' as const, currency: 'CAD', balanceCents: 999999, isBudgetAccount: true },
+    { kind: 'account' as const, currency: 'CAD', balanceCents: 1000000, isBudgetAccount: false },
+    { kind: 'account' as const, currency: 'COP', balanceCents: 295000000, isBudgetAccount: false },
+    { kind: 'account' as const, currency: 'COP', balanceCents: 295000000, isBudgetAccount: false },
+    { kind: 'planned' as const, currency: 'CAD', balanceCents: 300000, isBudgetAccount: false },
+  ];
+
+  it('is the other accounts, plus the budget account start, minus planned expenses', () => {
+    // 10,000 + 1,000 + 1,000 (pesos at 2950) + 2,144.98 - 3,000
+    expect(computeStartedWith(accounts, 214498, { COP: 2950 }, 'CAD').totalHomeCents).toBe(1114498);
+  });
+
+  it('is just the month start when there are no other accounts', () => {
+    expect(computeStartedWith([], 214498, {}, 'CAD').totalHomeCents).toBe(214498);
+  });
+
+  it('flags a currency that has no rate', () => {
+    const result = computeStartedWith(accounts, 214498, {}, 'CAD');
+    expect(result.missingRates).toEqual(['COP']);
+    expect(result.totalHomeCents).toBe(914498);
   });
 });

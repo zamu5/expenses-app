@@ -3,7 +3,12 @@ import { listAccounts, listExchangeRates } from '@/db/repositories/accounts';
 import { getBudgetAccountFlows } from '@/db/repositories/months';
 import { getSplitTotals } from '@/db/repositories/settlements';
 import type { Account, Db, ExchangeRate } from '@/db/types';
-import { computeNetWorth, type NetWorth, type NetWorthItem } from '@/domain/accounts';
+import {
+  computeNetWorth,
+  computeStartedWith,
+  type NetWorth,
+  type NetWorthItem,
+} from '@/domain/accounts';
 import { leftToSpendCents } from '@/domain/budget';
 import type { MonthKey } from '@/domain/dates';
 import { balanceCents, budgetAccountCents } from '@/domain/split';
@@ -26,6 +31,12 @@ export interface Overview {
   leftToSpendCents: number;
   /** Everything above in one number: accounts + what is owed - planned expenses - left to spend. */
   netWorth: NetWorth;
+  /**
+   * What the month started with across everything: the other accounts, plus the budget account's
+   * starting balance from the month's plan, minus planned expenses. Other accounts keep no history,
+   * so their balance as it is today is used.
+   */
+  startedWithCents: number;
 }
 
 /**
@@ -68,6 +79,12 @@ export async function loadOverview(db: Db, monthKey: MonthKey): Promise<Overview
     owedCents,
     leftToSpendCents: leftCents,
     netWorth: computeNetWorth(items, rateOf, CURRENCY),
+    startedWithCents: computeStartedWith(
+      saved,
+      monthView.month?.startingBalanceCents ?? 0,
+      rateOf,
+      CURRENCY,
+    ).totalHomeCents,
   };
 }
 
