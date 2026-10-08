@@ -40,6 +40,9 @@ export interface Overview {
    * counts them separately.
    */
   startedWithCents: number;
+  /** The two corrections inside `startedWithCents`, for showing how it is worked out. */
+  depositedThisMonthCents: number;
+  paidThisMonthCents: number;
 }
 
 /**
@@ -63,8 +66,8 @@ export async function loadOverview(db: Db, monthKey: MonthKey): Promise<Overview
     expenses.map((e) => ({ accountId: e.paymentAccountId, amountCents: e.amountCents })),
     accounts,
   );
-  const startedWithCents =
-    startedWith.totalHomeCents - depositsIntoStartCents(incomes, accounts) + paidCents;
+  const depositedCents = depositsIntoStartCents(incomes, accounts);
+  const startedWithCents = startedWith.totalHomeCents - depositedCents + paidCents;
   const monthView = await loadMonthView(db, monthKey, startedWithCents);
 
   const leftCents = monthView.month ? leftToSpendCents(monthView.summary.categories) : 0;
@@ -84,6 +87,8 @@ export async function loadOverview(db: Db, monthKey: MonthKey): Promise<Overview
     netWorth: computeNetWorth(items, rateOf, CURRENCY),
     startedWith,
     startedWithCents,
+    depositedThisMonthCents: depositedCents,
+    paidThisMonthCents: paidCents,
   };
 }
 

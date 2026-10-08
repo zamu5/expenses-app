@@ -164,7 +164,7 @@ function BalanceCard(props: {
         </ThemedText>
       </Pressable>
       <View style={styles.between}>
-        <Stat label="Started with" cents={props.startingCents} onPress={() => router.navigate('/accounts')} />
+        <Stat label="Started with" cents={props.startingCents} onPress={() => router.push('/started-with')} />
         <Stat label="Planned end" cents={props.plannedCents} />
       </View>
       <View style={[styles.between, styles.incomeRow, { borderTopColor: theme.separator }]}>
