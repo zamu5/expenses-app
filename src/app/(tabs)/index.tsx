@@ -192,11 +192,13 @@ function Stat({
 const TILES_PER_ROW = 4;
 const TILE_GAP = Spacing.two;
 
-/** Whole units without the currency symbol ("1,200"), so the amount fits in a small tile. */
-const formatWhole = (cents: number) =>
-  new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(Math.trunc(Math.abs(cents) / 100));
+/** An amount with its cents but without the currency symbol ("1,200.00"), to fit a small tile. */
+const formatPlain = (cents: number) =>
+  new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(
+    Math.abs(cents) / 100,
+  );
 
-/** One category as a small box: its name, what is left of its budget, and how much is used. */
+/** One category as a small box: what is left of its budget, what was spent of how much, and a bar. */
 function CategoryTile({ category: c, width }: { category: CategorySummary; width: number }) {
   const theme = useTheme();
   const color = useStatusColor(c.status);
@@ -206,12 +208,11 @@ function CategoryTile({ category: c, width }: { category: CategorySummary; width
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${c.name}: ${formatWhole(c.remainingCents)} ${isOver ? 'over' : 'left'}`}
+      accessibilityLabel={`${c.name}: ${formatPlain(c.remainingCents)} ${isOver ? 'over' : 'left'}, ${formatPlain(c.spentCents)} spent of ${formatPlain(c.budgetCents)}`}
       onPress={() => router.push({ pathname: '/category/[id]', params: { id: c.id } })}
       style={({ pressed }) => [
         styles.tile,
-        // Square on a phone; on a wide screen the tiles get wider but not taller.
-        { width, minHeight: Math.min(width, 110), backgroundColor: theme.backgroundElement, opacity: pressed ? 0.7 : 1 },
+        { width, backgroundColor: theme.backgroundElement, opacity: pressed ? 0.7 : 1 },
       ]}>
       <ThemedText type="small" numberOfLines={2} style={styles.tileName}>
         {c.name}
@@ -221,11 +222,22 @@ function CategoryTile({ category: c, width }: { category: CategorySummary; width
           numberOfLines={1}
           adjustsFontSizeToFit
           style={[styles.tileAmount, { color: isOver ? theme.critical : theme.text }]}>
-          {formatWhole(c.remainingCents)}
+          {formatPlain(c.remainingCents)}
         </ThemedText>
         {/* The word carries the meaning too, so it does not depend on the colour alone. */}
         <ThemedText type="small" style={[styles.tileCaption, { color: isOver ? theme.critical : theme.textSecondary }]}>
           {isOver ? 'over' : 'left'}
+        </ThemedText>
+      </View>
+      <View>
+        <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} adjustsFontSizeToFit style={styles.tileCaption}>
+          {formatPlain(c.spentCents)} spent
+        </ThemedText>
+        <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} adjustsFontSizeToFit style={styles.tileCaption}>
+          of {formatPlain(c.budgetCents)}
+        </ThemedText>
+        <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.tileCaption}>
+          {Math.round(ratio * 100)}%{c.isFixed ? ' · fixed' : ''}
         </ThemedText>
       </View>
       <ProgressBar ratio={ratio} color={color} />
@@ -246,10 +258,11 @@ const styles = StyleSheet.create({
     padding: Spacing.two,
   },
   grid: { flexDirection: 'row', flexWrap: 'wrap' },
-  tile: { borderRadius: 12, padding: Spacing.two, justifyContent: 'space-between', gap: Spacing.one },
-  tileName: { fontSize: 12, lineHeight: 15, fontWeight: 600 },
-  tileAmount: { fontSize: 20, lineHeight: 24, fontWeight: 700, fontVariant: ['tabular-nums'] },
-  tileCaption: { fontSize: 11, lineHeight: 13 },
+  tile: { borderRadius: 12, padding: 6, justifyContent: 'space-between', gap: Spacing.one },
+  // Two lines are always reserved, so tiles in a row line up whatever the name length.
+  tileName: { fontSize: 12, lineHeight: 15, fontWeight: 600, minHeight: 30 },
+  tileAmount: { fontSize: 14, lineHeight: 18, fontWeight: 700, fontVariant: ['tabular-nums'] },
+  tileCaption: { fontSize: 10, lineHeight: 13, fontVariant: ['tabular-nums'] },
   between: {
     flexDirection: 'row',
     justifyContent: 'space-between',
