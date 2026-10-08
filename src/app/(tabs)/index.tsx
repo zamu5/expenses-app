@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import { IncomeList } from '@/components/income-list';
 import { MonthSwitcher } from '@/components/month-switcher';
@@ -31,6 +31,10 @@ export default function MonthScreen() {
   const selectedMonth = useUiStore((s) => s.selectedMonth);
   const { data: overview, error } = useOverview(selectedMonth);
   const data = overview?.monthView;
+  // Four tiles per row: the screen width, minus the page padding and the three gaps between them.
+  const { width: screenWidth } = useWindowDimensions();
+  const contentWidth = screenWidth - Spacing.three * 2;
+  const tileWidth = Math.floor((contentWidth - TILE_GAP * (TILES_PER_ROW - 1)) / TILES_PER_ROW);
   const { data: incomes } = useDbQuery((db) => listIncomes(db, selectedMonth), [selectedMonth]);
 
   return (
@@ -67,9 +71,11 @@ export default function MonthScreen() {
             <IncomeList incomes={incomes ?? []} />
 
             <SectionLabel>Categories</SectionLabel>
-            {data.summary.categories.map((c) => (
-              <CategoryRow key={c.id} category={c} />
-            ))}
+            <View style={[styles.grid, { gap: TILE_GAP }]}>
+              {data.summary.categories.map((c) => (
+                <CategoryTile key={c.id} category={c} width={tileWidth} />
+              ))}
+            </View>
 
             <Button title="Edit plan" variant="secondary" onPress={() => router.push('/plan')} />
           </>
@@ -162,48 +168,56 @@ function Stat({
   );
 }
 
-function CategoryRow({ category: c }: { category: CategorySummary }) {
+const TILES_PER_ROW = 4;
+const TILE_GAP = Spacing.two;
+
+/** Whole units without the currency symbol ("1,200"), so the amount fits in a small tile. */
+const formatWhole = (cents: number) =>
+  new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(Math.trunc(Math.abs(cents) / 100));
+
+/** One category as a small box: its name, what is left of its budget, and how much is used. */
+function CategoryTile({ category: c, width }: { category: CategorySummary; width: number }) {
   const theme = useTheme();
   const color = useStatusColor(c.status);
   const ratio = c.budgetCents > 0 ? c.spentCents / c.budgetCents : c.spentCents > 0 ? 1 : 0;
+  const isOver = c.remainingCents < 0;
 
   return (
     <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${c.name}: ${formatWhole(c.remainingCents)} ${isOver ? 'over' : 'left'}`}
       onPress={() => router.push({ pathname: '/category/[id]', params: { id: c.id } })}
-      style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}>
-      <Card>
-        <View style={styles.between}>
-          <ThemedText type="smallBold" style={{ fontSize: 16 }}>
-            {c.name}
-            {c.isFixed ? (
-              <ThemedText type="small" themeColor="textSecondary">
-                {'  fixed'}
-              </ThemedText>
-            ) : null}
-          </ThemedText>
-          <StatusPill status={c.status} />
-        </View>
-        <ProgressBar ratio={ratio} color={color} />
-        <View style={styles.between}>
-          <ThemedText type="small" themeColor="textSecondary">
-            <Money cents={c.spentCents} type="small" color={theme.textSecondary} /> of{' '}
-            <Money cents={c.budgetCents} type="small" color={theme.textSecondary} />
-          </ThemedText>
-          <ThemedText type="small" style={{ color: c.remainingCents < 0 ? theme.critical : theme.text }}>
-            <Money
-              cents={Math.abs(c.remainingCents)}
-              type="small"
-              color={c.remainingCents < 0 ? theme.critical : theme.text}
-            />
-            {c.remainingCents < 0 ? ' over' : ' left'}
-          </ThemedText>
-        </View>
-      </Card>
+      style={({ pressed }) => [
+        styles.tile,
+        // Square on a phone; on a wide screen the tiles get wider but not taller.
+        { width, minHeight: Math.min(width, 110), backgroundColor: theme.backgroundElement, opacity: pressed ? 0.7 : 1 },
+      ]}>
+      <ThemedText type="small" numberOfLines={2} style={styles.tileName}>
+        {c.name}
+      </ThemedText>
+      <View>
+        <ThemedText
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          style={[styles.tileAmount, { color: isOver ? theme.critical : theme.text }]}>
+          {formatWhole(c.remainingCents)}
+        </ThemedText>
+        {/* The word carries the meaning too, so it does not depend on the colour alone. */}
+        <ThemedText type="small" style={[styles.tileCaption, { color: isOver ? theme.critical : theme.textSecondary }]}>
+          {isOver ? 'over' : 'left'}
+        </ThemedText>
+      </View>
+      <ProgressBar ratio={ratio} color={color} />
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
+  grid: { flexDirection: 'row', flexWrap: 'wrap' },
+  tile: { borderRadius: 12, padding: Spacing.two, justifyContent: 'space-between', gap: Spacing.one },
+  tileName: { fontSize: 12, lineHeight: 15, fontWeight: 600 },
+  tileAmount: { fontSize: 20, lineHeight: 24, fontWeight: 700, fontVariant: ['tabular-nums'] },
+  tileCaption: { fontSize: 11, lineHeight: 13 },
   between: {
     flexDirection: 'row',
     justifyContent: 'space-between',
