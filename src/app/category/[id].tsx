@@ -19,6 +19,7 @@ import {
   StatusPill,
   useStatusColor,
 } from '@/components/ui';
+import { PEOPLE } from '@/config';
 import { listExpenses } from '@/db/repositories/expenses';
 import { setBudget } from '@/db/repositories/months';
 import type { CategorySummary } from '@/domain/budget';
@@ -118,6 +119,9 @@ function Overview({ category: c }: { category: CategorySummary }) {
         <Stat label={c.remainingCents < 0 ? 'Over by' : 'Left'} cents={Math.abs(c.remainingCents)} />
         <Stat label="Expected by month end" cents={c.projectedSpendCents} />
       </View>
+      <ThemedText type="small" themeColor="textSecondary">
+        Counts your share only: half of shared expenses, none of what was only for {PEOPLE.adriana}.
+      </ThemedText>
       {c.pace !== null ? (
         <ThemedText type="small" themeColor="textSecondary">
           {c.pace <= 1

@@ -1,4 +1,4 @@
-import { computeMonthSummary, summarizeCategory, type CategoryInput } from './budget';
+import { computeMonthSummary, leftToSpendCents, summarizeCategory, type CategoryInput } from './budget';
 
 // The worked example from the plan: October 2026, today is the 7th, starting with 3,000.00.
 const october: CategoryInput[] = [
@@ -24,8 +24,19 @@ describe('computeMonthSummary', () => {
     expect(summary.projectedEndCents).toBe(87000);
   });
 
-  it('marks the month as watch when the projection falls below plan', () => {
-    expect(summary.status).toBe('watch');
+  it('is on track while the plan ends above zero and no category is over', () => {
+    expect(summary.status).toBe('onTrack');
+  });
+
+  it('is watch as soon as one category is over its budget', () => {
+    const over = october.map((c) => (c.id === 'fun' ? { ...c, spentCents: 25000 } : c));
+    const result = computeMonthSummary({ startingBalanceCents: 300000, categories: over, daysInMonth: 31, daysElapsed: 7 });
+    expect(result.status).toBe('watch');
+  });
+
+  it('is danger when even sticking to the budget ends below zero', () => {
+    const result = computeMonthSummary({ startingBalanceCents: 100000, categories: october, daysInMonth: 31, daysElapsed: 7 });
+    expect(result.status).toBe('danger');
   });
 
   it('gives each category the status from the plan', () => {
@@ -108,5 +119,47 @@ describe('income', () => {
     const tight = { startingBalanceCents: 100000, categories: october, daysInMonth: 31, daysElapsed: 7 };
     expect(computeMonthSummary(tight).status).toBe('danger');
     expect(computeMonthSummary({ ...tight, incomeCents: 300000 }).status).not.toBe('danger');
+  });
+});
+
+describe('leftToSpendCents', () => {
+  it('adds what is left in each category', () => {
+    // rent 0 + groceries 280 + transport 90 + fun 170
+    expect(leftToSpendCents(october)).toBe(54000);
+  });
+
+  it('does not let an overspent category cancel out another', () => {
+    expect(
+      leftToSpendCents([
+        { budgetCents: 10000, spentCents: 15000 },
+        { budgetCents: 10000, spentCents: 4000 },
+      ]),
+    ).toBe(6000);
+  });
+
+  it('is zero with no categories', () => {
+    expect(leftToSpendCents([])).toBe(0);
+  });
+});
+
+describe('expected income', () => {
+  const base = { startingBalanceCents: 300000, categories: october, daysInMonth: 31, daysElapsed: 7 };
+
+  it('counts toward the planned end before it is received', () => {
+    const summary = computeMonthSummary({ ...base, expectedIncomeCents: 250000 });
+    expect(summary.plannedEndCents).toBe(300000 + 250000 - 195000);
+    // Not received yet, so it is not in the current balance.
+    expect(summary.currentBalanceCents).toBe(159000);
+    expect(summary.totalIncomeCents).toBe(0);
+  });
+
+  it('is not counted twice once the salary is logged', () => {
+    const summary = computeMonthSummary({ ...base, expectedIncomeCents: 250000, incomeCents: 250000 });
+    expect(summary.plannedEndCents).toBe(300000 + 250000 - 195000);
+  });
+
+  it('gives way to what was really received when that is more', () => {
+    const summary = computeMonthSummary({ ...base, expectedIncomeCents: 250000, incomeCents: 260000 });
+    expect(summary.plannedEndCents).toBe(300000 + 260000 - 195000);
   });
 });

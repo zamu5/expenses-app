@@ -72,6 +72,23 @@ export function computeNetWorth(
   };
 }
 
+/**
+ * What a month starts with: every account marked "include in starting balance", minus every
+ * planned expense. Nothing is typed for the month itself. Returns a NetWorth so currencies
+ * without a rate are flagged the same way as in the total.
+ */
+export function computeStartedWith(
+  accounts: (NetWorthItem & { includeInStart: boolean })[],
+  rates: Record<string, number>,
+  homeCurrency: string,
+): NetWorth {
+  return computeNetWorth(
+    accounts.filter((a) => a.kind === 'planned' || a.includeInStart),
+    rates,
+    homeCurrency,
+  );
+}
+
 /** Cleans what the user typed into an ISO 4217 code, or null when it is not three letters. */
 export function parseCurrencyCode(input: string): string | null {
   const code = input.trim().toUpperCase();

@@ -1,5 +1,6 @@
 import type { CategoryInput } from '@/domain/budget';
 import type { MonthKey } from '@/domain/dates';
+import { BUDGET_OWNER } from '@/domain/split';
 import { newId, nowISO } from '@/lib/id';
 
 import { notifyDataChanged } from '../events';
@@ -9,16 +10,22 @@ interface MonthRow {
   id: string;
   month_key: string;
   starting_balance_cents: number;
+  expected_income_cents: number;
 }
 
 export async function getMonth(db: Db, month: MonthKey): Promise<Month | null> {
   const row = await db.getFirstAsync<MonthRow>(
-    `SELECT id, month_key, starting_balance_cents FROM months
+    `SELECT id, month_key, starting_balance_cents, expected_income_cents FROM months
      WHERE month_key = ? AND deleted_at IS NULL`,
     [month],
   );
   return row
-    ? { id: row.id, monthKey: row.month_key, startingBalanceCents: row.starting_balance_cents }
+    ? {
+        id: row.id,
+        monthKey: row.month_key,
+        startingBalanceCents: row.starting_balance_cents,
+        expectedIncomeCents: row.expected_income_cents,
+      }
     : null;
 }
 
@@ -50,7 +57,10 @@ export async function getPreviousPlan(
 
 export interface MonthPlan {
   month: MonthKey;
-  startingBalanceCents: number;
+  /** No longer used by the app; a new month stores 0. */
+  startingBalanceCents?: number;
+  /** Income expected this month. Left out, an existing month keeps what it had. */
+  expectedIncomeCents?: number;
   budgets: { categoryId: string; amountCents: number }[];
   /** Categories taken out of this month only. They stay available for other months. */
   removedCategoryIds?: string[];
@@ -61,12 +71,21 @@ export async function saveMonthPlan(db: Db, plan: MonthPlan): Promise<void> {
   const now = nowISO();
   await db.withTransactionAsync(async () => {
     await db.runAsync(
-      `INSERT INTO months (id, month_key, starting_balance_cents, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?)
+      `INSERT INTO months
+         (id, month_key, starting_balance_cents, expected_income_cents, created_at, updated_at)
+       VALUES (?, ?, ?, COALESCE(?, 0), ?, ?)
        ON CONFLICT (month_key) DO UPDATE SET
-         starting_balance_cents = excluded.starting_balance_cents,
+         expected_income_cents = COALESCE(?, expected_income_cents),
          updated_at = excluded.updated_at`,
-      [newId(), plan.month, plan.startingBalanceCents, now, now],
+      [
+        newId(),
+        plan.month,
+        plan.startingBalanceCents ?? 0,
+        plan.expectedIncomeCents ?? null,
+        now,
+        now,
+        plan.expectedIncomeCents ?? null,
+      ],
     );
     const month = await getMonth(db, plan.month);
     if (!month) throw new Error(`Month ${plan.month} was not saved`);
@@ -110,7 +129,6 @@ export async function setBudget(
   if (!existing) throw new Error(`Plan ${month} before setting budgets`);
   await saveMonthPlan(db, {
     month,
-    startingBalanceCents: existing.startingBalanceCents,
     budgets: [{ categoryId, amountCents }],
   });
 }
@@ -119,7 +137,8 @@ export async function setBudget(
  * Everything the Month screen needs, ready for computeMonthSummary(): the categories in this
  * month's plan (see listCategoriesForMonth), plus any other category with spending this month,
  * so money is never hidden.
- * The database does the summing (SUM + GROUP BY); totals are never stored.
+ * `spentCents` is the budget owner's share: shared expenses count half, and expenses only for the
+ * other person count nothing. The database does the summing (SUM + GROUP BY); totals are never stored.
  */
 export async function getMonthCategoryInputs(db: Db, month: MonthKey): Promise<CategoryInput[]> {
   const rows = await db.getAllAsync<{
@@ -127,11 +146,12 @@ export async function getMonthCategoryInputs(db: Db, month: MonthKey): Promise<C
     name: string;
     is_fixed: number;
     budget_cents: number | null;
-    spent_cents: number | null;
+    any_cents: number | null;
+    share_cents: number | null;
   }>(
     `SELECT c.id, c.name, c.is_fixed,
             CASE WHEN b.deleted_at IS NULL THEN b.amount_cents END AS budget_cents,
-            s.spent_cents
+            s.any_cents, s.share_cents
      FROM categories c
      LEFT JOIN (
        SELECT b.category_id, b.amount_cents, b.deleted_at FROM category_budgets b
@@ -139,23 +159,32 @@ export async function getMonthCategoryInputs(db: Db, month: MonthKey): Promise<C
        WHERE m.month_key = ?
      ) b ON b.category_id = c.id
      LEFT JOIN (
-       SELECT category_id, SUM(amount_cents) AS spent_cents FROM expenses
+       SELECT category_id,
+              SUM(amount_cents) AS any_cents,
+              -- The same rule as ownerShareCents(), expense by expense. "/ 2" rounds down.
+              SUM(CASE
+                    WHEN for_whom = ? THEN amount_cents
+                    WHEN for_whom <> 'shared' THEN 0
+                    WHEN paid_by = ? THEN amount_cents - amount_cents / 2
+                    ELSE amount_cents / 2
+                  END) AS share_cents
+       FROM expenses
        WHERE spent_on LIKE ? AND deleted_at IS NULL
        GROUP BY category_id
      ) s ON s.category_id = c.id
      WHERE c.deleted_at IS NULL
-       AND (s.spent_cents > 0
+       AND (s.any_cents > 0
          OR (b.category_id IS NOT NULL AND b.deleted_at IS NULL
              AND (c.archived_at IS NULL OR b.amount_cents > 0))
          OR (b.category_id IS NULL AND c.is_monthly = 1 AND c.archived_at IS NULL))
      ORDER BY c.sort_order, c.name`,
-    [month, `${month}-%`],
+    [month, BUDGET_OWNER, BUDGET_OWNER, `${month}-%`],
   );
   return rows.map((r) => ({
     id: r.id,
     name: r.name,
     isFixed: r.is_fixed === 1,
     budgetCents: r.budget_cents ?? 0,
-    spentCents: r.spent_cents ?? 0,
+    spentCents: r.share_cents ?? 0,
   }));
 }

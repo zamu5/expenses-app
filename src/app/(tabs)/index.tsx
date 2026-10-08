@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import { BalanceBetweenCard } from '@/components/balance-between-card';
+import { IncomeList } from '@/components/income-list';
 import { MonthSwitcher } from '@/components/month-switcher';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -19,15 +19,19 @@ import {
   useStatusColor,
 } from '@/components/ui';
 import { Spacing } from '@/constants/theme';
+import { listIncomes } from '@/db/repositories/incomes';
 import type { CategorySummary } from '@/domain/budget';
 import { formatMonth } from '@/domain/dates';
-import { useMonthSummary } from '@/hooks/use-month-summary';
+import { useDbQuery } from '@/hooks/use-db-query';
+import { useOverview } from '@/hooks/use-overview';
 import { useTheme } from '@/hooks/use-theme';
 import { useUiStore } from '@/store/ui';
 
 export default function MonthScreen() {
   const selectedMonth = useUiStore((s) => s.selectedMonth);
-  const { data, error } = useMonthSummary(selectedMonth);
+  const { data: overview, error } = useOverview(selectedMonth);
+  const data = overview?.monthView;
+  const { data: incomes } = useDbQuery((db) => listIncomes(db, selectedMonth), [selectedMonth]);
 
   return (
     <ThemedView style={{ flex: 1 }}>
@@ -37,13 +41,11 @@ export default function MonthScreen() {
 
         {error ? <ThemedText>Could not load this month: {error.message}</ThemedText> : null}
 
-        <BalanceBetweenCard />
-
         {data && !data.month ? (
           <>
             <EmptyState
               title={`Plan ${formatMonth(selectedMonth)}`}
-              body="Set the money you start the month with and a budget for each category."
+              body="Set a budget for each category. What you start with comes from your accounts."
             />
             <Button title="Plan this month" onPress={() => router.push('/plan')} />
           </>
@@ -52,16 +54,17 @@ export default function MonthScreen() {
         {data?.month ? (
           <>
             <BalanceCard
-              startingCents={data.month.startingBalanceCents}
+              startingCents={overview?.startedWith.totalHomeCents ?? 0}
               incomeCents={data.summary.totalIncomeCents}
-              currentCents={data.summary.currentBalanceCents}
+              currentCents={overview?.netWorth.totalHomeCents ?? 0}
+              missingRates={overview?.netWorth.missingRates ?? []}
               plannedCents={data.summary.plannedEndCents}
-              projectedCents={data.summary.projectedEndCents}
               status={data.summary.status}
-              isEarly={data.summary.isEarlyEstimate}
               daysElapsed={data.daysElapsed}
               daysInMonth={data.daysInMonth}
             />
+
+            <IncomeList incomes={incomes ?? []} />
 
             <SectionLabel>Categories</SectionLabel>
             {data.summary.categories.map((c) => (
@@ -80,18 +83,19 @@ export default function MonthScreen() {
 }
 
 function BalanceCard(props: {
+  /** Accounts marked "include in starting balance", minus planned expenses. */
   startingCents: number;
   incomeCents: number;
+  /** The Accounts tab total: every account, what is owed, minus planned expenses and what is left to spend. */
   currentCents: number;
+  missingRates: string[];
+  /** Money in the account you pay from: start + income - what you paid, with payments between you two. */
   plannedCents: number;
-  projectedCents: number;
   status: 'onTrack' | 'watch' | 'danger';
-  isEarly: boolean;
   daysElapsed: number;
   daysInMonth: number;
 }) {
   const theme = useTheme();
-  const statusColor = useStatusColor(props.status);
   const dayLabel =
     props.daysElapsed === 0
       ? 'Not started yet'
@@ -107,20 +111,23 @@ function BalanceCard(props: {
         </ThemedText>
         <StatusPill status={props.status} />
       </View>
-      <View>
+      <Pressable onPress={() => router.navigate('/accounts')}>
         <ThemedText type="small" themeColor="textSecondary">
           Current balance
         </ThemedText>
-        <Money cents={props.currentCents} type="subtitle" />
-      </View>
-      <View style={styles.between}>
-        <Stat label="Started with" cents={props.startingCents} onPress={() => router.push('/plan')} />
-        <Stat label="Planned end" cents={props.plannedCents} />
-        <Stat
-          label={props.isEarly ? 'Projected (early)' : 'Projected end'}
-          cents={props.projectedCents}
-          color={statusColor}
+        <Money
+          cents={props.currentCents}
+          type="subtitle"
+          color={props.currentCents < 0 ? theme.critical : undefined}
         />
+        <ThemedText type="small" themeColor="textSecondary">
+          All accounts, minus planned expenses and what is left to spend
+          {props.missingRates.length > 0 ? `. Not counted: ${props.missingRates.join(', ')} (no rate)` : ''}
+        </ThemedText>
+      </Pressable>
+      <View style={styles.between}>
+        <Stat label="Started with" cents={props.startingCents} onPress={() => router.navigate('/accounts')} />
+        <Stat label="Planned end" cents={props.plannedCents} />
       </View>
       <View style={[styles.between, styles.incomeRow, { borderTopColor: theme.separator }]}>
         <Stat label="Income this month" cents={props.incomeCents} color={theme.good} />

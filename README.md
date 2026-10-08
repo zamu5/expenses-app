@@ -89,14 +89,17 @@ category in the plan takes it out of that month only.
 Every expense records who paid and who it was for: shared 50/50, or only one of you. From that the
 app keeps a running balance across all months ("Adriana owes Sergio $40"), shown at the top of the
 Month tab. Tap it to see where the number comes from and to record a payment that settles it.
-Budgets still count the full amount of every expense, whoever paid.
+Budgets count only your share: half of a shared expense, all of one that was only for you, and
+nothing of one that was only for the other person, whoever paid. A 83.34 shared expense in a 100
+budget leaves 58.33.
 
 The math is in `src/domain/split.ts`. The two names are `PEOPLE` in `src/config.ts`.
 
 ## Income
 
 Money you receive (salary, a refund) is logged with **+ Add income** on the Month tab. It is not
-an expense: it raises the month's current, planned and projected balances.
+an expense. The month's plan can hold an **expected salary**: Planned end counts it until the real
+income is logged, and from then on counts whichever is larger, so it is never counted twice.
 
 ## Accounts and planned expenses
 
@@ -104,10 +107,14 @@ The Accounts tab shows everything in one place: each account in its own currency
 are planning for but have not put in a month (counted as negative), and a total in your home
 currency. Nothing is predefined; you add, rename and delete accounts yourself.
 
-- Mark one account as the **Budget account**: its balance is not typed, it follows the current
-  balance of the month selected in the app.
-- Other balances are typed in by hand, and so are exchange rates ("1 CAD = how many COP?").
-  A currency without a rate is shown but left out of the total.
+- Every balance is typed in by hand, and so are exchange rates ("1 CAD = how many COP?").
+  A currency without a rate is shown but left out of the total. Logging an expense does not move
+  any account: update the balance when it changes.
+- Two rows are worked out by the app: what the two of you owe each other, and **Left to spend**
+  (the month's budget not spent yet, counted as negative).
+- The total of this tab is the **Current balance** on the Month tab.
+- **Started with** on the Month tab is every account with **Include in starting balance** switched
+  on, minus planned expenses. Nothing is typed for the month itself.
 
 The math is in `src/domain/accounts.ts`.
 

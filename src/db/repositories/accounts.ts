@@ -9,7 +9,7 @@ interface AccountRow {
   kind: AccountKind;
   currency: string;
   balance_cents: number;
-  is_budget_account: number;
+  include_in_start: number;
   balance_updated_on: string;
 }
 
@@ -19,17 +19,18 @@ const toAccount = (r: AccountRow): Account => ({
   kind: r.kind,
   currency: r.currency,
   balanceCents: r.balance_cents,
-  isBudgetAccount: r.is_budget_account === 1,
+  includeInStart: r.include_in_start === 1,
   balanceUpdatedOn: r.balance_updated_on,
 });
 
-const COLUMNS = 'id, name, kind, currency, balance_cents, is_budget_account, balance_updated_on';
+const COLUMNS =
+  'id, name, kind, currency, balance_cents, include_in_start, balance_updated_on';
 
 /** Accounts first, then planned expenses, each in the order they were added. */
 export async function listAccounts(db: Db): Promise<Account[]> {
   const rows = await db.getAllAsync<AccountRow>(
     `SELECT ${COLUMNS} FROM accounts WHERE deleted_at IS NULL
-     ORDER BY kind, is_budget_account DESC, sort_order, name`,
+     ORDER BY kind, sort_order, name`,
     [],
   );
   return rows.map(toAccount);
@@ -48,59 +49,51 @@ export interface AccountInput {
   kind: AccountKind;
   currency: string;
   balanceCents: number;
-  isBudgetAccount?: boolean;
+  /** Defaults to true. */
+  includeInStart?: boolean;
   /** Day the balance was typed, 'YYYY-MM-DD'. */
   balanceUpdatedOn: string;
-}
-
-/** Only one account can be the budget account, so marking one unmarks the others. */
-async function clearBudgetAccount(db: Db, exceptId: string, now: string): Promise<void> {
-  await db.runAsync(
-    'UPDATE accounts SET is_budget_account = 0, updated_at = ? WHERE is_budget_account = 1 AND id <> ?',
-    [now, exceptId],
-  );
 }
 
 export async function createAccount(db: Db, input: AccountInput): Promise<string> {
   const id = newId();
   const now = nowISO();
-  const isBudget = input.kind === 'account' && input.isBudgetAccount === true;
-  await db.withTransactionAsync(async () => {
-    await db.runAsync(
-      `INSERT INTO accounts
-         (id, name, kind, currency, balance_cents, is_budget_account, balance_updated_on,
-          sort_order, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), -1) + 1 FROM accounts), ?, ?)`,
-      [
-        id,
-        input.name.trim(),
-        input.kind,
-        input.currency,
-        input.balanceCents,
-        isBudget ? 1 : 0,
-        input.balanceUpdatedOn,
-        now,
-        now,
-      ],
-    );
-    if (isBudget) await clearBudgetAccount(db, id, now);
-  });
+  await db.runAsync(
+    `INSERT INTO accounts
+       (id, name, kind, currency, balance_cents, include_in_start, balance_updated_on,
+        sort_order, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), -1) + 1 FROM accounts), ?, ?)`,
+    [
+      id,
+      input.name.trim(),
+      input.kind,
+      input.currency,
+      input.balanceCents,
+      (input.includeInStart ?? true) ? 1 : 0,
+      input.balanceUpdatedOn,
+      now,
+      now,
+    ],
+  );
   notifyDataChanged();
   return id;
 }
 
 export async function updateAccount(db: Db, id: string, input: AccountInput): Promise<void> {
-  const now = nowISO();
-  const isBudget = input.kind === 'account' && input.isBudgetAccount === true;
-  await db.withTransactionAsync(async () => {
-    await db.runAsync(
-      `UPDATE accounts SET name = ?, currency = ?, balance_cents = ?, is_budget_account = ?,
-         balance_updated_on = ?, updated_at = ?
-       WHERE id = ?`,
-      [input.name.trim(), input.currency, input.balanceCents, isBudget ? 1 : 0, input.balanceUpdatedOn, now, id],
-    );
-    if (isBudget) await clearBudgetAccount(db, id, now);
-  });
+  await db.runAsync(
+    `UPDATE accounts SET name = ?, currency = ?, balance_cents = ?, include_in_start = ?,
+       balance_updated_on = ?, updated_at = ?
+     WHERE id = ?`,
+    [
+      input.name.trim(),
+      input.currency,
+      input.balanceCents,
+      (input.includeInStart ?? true) ? 1 : 0,
+      input.balanceUpdatedOn,
+      nowISO(),
+      id,
+    ],
+  );
   notifyDataChanged();
 }
 

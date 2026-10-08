@@ -59,11 +59,10 @@ function AccountForm({
   const [name, setName] = useState(account?.name ?? '');
   const [currencyText, setCurrencyText] = useState(account?.currency ?? CURRENCY);
   const [balanceText, setBalanceText] = useState(account ? centsToInputText(account.balanceCents) : '');
-  const [isBudgetAccount, setIsBudgetAccount] = useState(account?.isBudgetAccount ?? false);
+  const [includeInStart, setIncludeInStart] = useState(account?.includeInStart ?? true);
 
   const currency = parseCurrencyCode(currencyText);
-  // The budget account's balance comes from the monthly budget, so nothing is typed for it.
-  const balanceCents = isBudgetAccount ? 0 : balanceText.trim() === '' ? 0 : parseAmountToCents(balanceText);
+  const balanceCents = balanceText.trim() === '' ? 0 : parseAmountToCents(balanceText);
   const canSave = name.trim() !== '' && currency !== null && balanceCents !== null;
 
   async function save() {
@@ -71,9 +70,9 @@ function AccountForm({
     const input = {
       name,
       kind,
-      currency: isBudgetAccount ? CURRENCY : currency,
+      currency,
       balanceCents,
-      isBudgetAccount,
+      includeInStart,
       // Keep the "updated" day unless the balance itself changed.
       balanceUpdatedOn:
         account && account.balanceCents === balanceCents ? account.balanceUpdatedOn : todayISO(),
@@ -107,52 +106,49 @@ function AccountForm({
         autoFocus={!account}
       />
 
-      {!isPlanned ? (
-        <ToggleRow
-          label="Budget account"
-          hint={`The account your monthly budget is spent from. Its balance follows the budget, in ${CURRENCY}.`}
-          value={isBudgetAccount}
-          onValueChange={setIsBudgetAccount}
-        />
+      <SectionLabel>Currency</SectionLabel>
+      <Chips
+        options={currencies.map((c) => ({ value: c, label: c }))}
+        value={currency}
+        onChange={setCurrencyText}
+      />
+      <Field
+        label="Or type a 3-letter code"
+        value={currencyText}
+        onChangeText={setCurrencyText}
+        autoCapitalize="characters"
+        autoCorrect={false}
+        maxLength={3}
+        placeholder="COP"
+      />
+      {currency === null ? (
+        <ThemedText type="small" style={{ color: theme.critical }}>
+          Use a 3-letter currency code, like CAD or COP.
+        </ThemedText>
       ) : null}
 
-      {isBudgetAccount ? null : (
-        <>
-          <SectionLabel>Currency</SectionLabel>
-          <Chips
-            options={currencies.map((c) => ({ value: c, label: c }))}
-            value={currency}
-            onChange={setCurrencyText}
-          />
-          <Field
-            label="Or type a 3-letter code"
-            value={currencyText}
-            onChangeText={setCurrencyText}
-            autoCapitalize="characters"
-            autoCorrect={false}
-            maxLength={3}
-            placeholder="COP"
-          />
-          {currency === null ? (
-            <ThemedText type="small" style={{ color: theme.critical }}>
-              Use a 3-letter currency code, like CAD or COP.
-            </ThemedText>
-          ) : null}
+      <Field
+        label={isPlanned ? 'How much you expect to spend' : 'Current balance'}
+        value={balanceText}
+        onChangeText={setBalanceText}
+        keyboardType="decimal-pad"
+        placeholder="0.00"
+      />
+      {balanceCents === null ? (
+        <ThemedText type="small" style={{ color: theme.critical }}>
+          Enter an amount like 1500.00
+        </ThemedText>
+      ) : null}
 
-          <Field
-            label={isPlanned ? 'How much you expect to spend' : 'Current balance'}
-            value={balanceText}
-            onChangeText={setBalanceText}
-            keyboardType="decimal-pad"
-            placeholder="0.00"
-          />
-          {balanceCents === null ? (
-            <ThemedText type="small" style={{ color: theme.critical }}>
-              Enter an amount like 1500.00
-            </ThemedText>
-          ) : null}
-        </>
-      )}
+      {/* Planned expenses always subtract, so they have no switch. */}
+      {!isPlanned ? (
+        <ToggleRow
+          label="Include in starting balance"
+          hint={'Counts toward "Started with" on the Month tab.'}
+          value={includeInStart}
+          onValueChange={setIncludeInStart}
+        />
+      ) : null}
 
       <View style={{ gap: 8, marginTop: 8 }}>
         <Button title={account ? 'Save changes' : `Add ${noun}`} onPress={save} disabled={!canSave} />

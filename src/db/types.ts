@@ -27,7 +27,10 @@ export interface Category {
 export interface Month {
   id: string;
   monthKey: string;
+  /** No longer used: what a month starts with now comes from the accounts. Kept for old data. */
   startingBalanceCents: number;
+  /** Income the plan expects this month, e.g. the salary. 0 when none was set. */
+  expectedIncomeCents: number;
 }
 
 export interface Expense {
@@ -61,8 +64,8 @@ export interface Account {
   /** ISO 4217 code, e.g. 'CAD' or 'COP'. */
   currency: string;
   balanceCents: number;
-  /** The one account the monthly budget lives in. Its balance comes from the budget, not from typing. */
-  isBudgetAccount: boolean;
+  /** Whether this account counts toward "Started with" on the Month tab. Planned expenses always subtract. */
+  includeInStart: boolean;
   /** Day the balance was last typed in. */
   balanceUpdatedOn: string;
 }

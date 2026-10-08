@@ -149,6 +149,22 @@ const migrations: ((db: Db) => Promise<void>)[] = [
       );
     `);
   },
+
+  // Version 5: each account says whether it counts toward what a month starts with.
+  async (db) => {
+    await db.execAsync('ALTER TABLE accounts ADD COLUMN include_in_start INTEGER NOT NULL DEFAULT 1;');
+  },
+
+  // Version 6: the "budget account" idea is gone; every account's balance is typed by hand.
+  // The is_budget_account column stays (old backups still have it) but is no longer read.
+  async (db) => {
+    await db.execAsync('UPDATE accounts SET is_budget_account = 0 WHERE is_budget_account <> 0;');
+  },
+
+  // Version 7: the salary (or other income) a month expects, set in its plan.
+  async (db) => {
+    await db.execAsync('ALTER TABLE months ADD COLUMN expected_income_cents INTEGER NOT NULL DEFAULT 0;');
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = migrations.length;

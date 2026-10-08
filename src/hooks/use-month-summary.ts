@@ -13,8 +13,16 @@ export interface MonthView {
   daysInMonth: number;
 }
 
-/** Loads one month from SQLite and runs it through the pure budget math. */
-export async function loadMonthView(db: Db, monthKey: MonthKey): Promise<MonthView> {
+/**
+ * Loads one month from SQLite and runs it through the pure budget math.
+ * `startedWithCents` is what the month starts with, from the accounts (see computeStartedWith).
+ * Screens that only look at categories can leave it out.
+ */
+export async function loadMonthView(
+  db: Db,
+  monthKey: MonthKey,
+  startedWithCents = 0,
+): Promise<MonthView> {
   const [month, categories, incomeCents] = await Promise.all([
     getMonth(db, monthKey),
     getMonthCategoryInputs(db, monthKey),
@@ -23,8 +31,9 @@ export async function loadMonthView(db: Db, monthKey: MonthKey): Promise<MonthVi
   const total = daysInMonth(monthKey);
   const elapsed = daysElapsed(monthKey, todayISO());
   const summary = computeMonthSummary({
-    startingBalanceCents: month?.startingBalanceCents ?? 0,
+    startingBalanceCents: startedWithCents,
     incomeCents,
+    expectedIncomeCents: month?.expectedIncomeCents ?? 0,
     categories,
     daysInMonth: total,
     daysElapsed: elapsed,

@@ -15,7 +15,8 @@ import { useTheme } from '@/hooks/use-theme';
 import { useUiStore } from '@/store/ui';
 
 /**
- * Starting balance + one budget per category for the selected month.
+ * One budget per category for the selected month. What the month starts with is not typed here:
+ * it comes from the accounts.
  * A month that was never planned is pre-filled from the most recent planned month.
  * Categories can be added to or removed from this month only, which is how categories
  * that are not monthly (insurance, holidays) come and go.
@@ -34,8 +35,8 @@ export default function PlanScreen() {
         return {
           categories,
           inMonthIds,
-          startingCents: existing.startingBalanceCents,
           budgets: await getBudgets(db, month),
+          expectedIncomeCents: existing.expectedIncomeCents,
           copiedFrom: null,
         };
       }
@@ -43,8 +44,8 @@ export default function PlanScreen() {
       return {
         categories,
         inMonthIds,
-        startingCents: null,
         budgets: previous?.budgets ?? {},
+        expectedIncomeCents: previous?.month.expectedIncomeCents ?? 0,
         copiedFrom: previous?.month.monthKey ?? null,
       };
     },
@@ -59,22 +60,22 @@ function PlanForm({
   month,
   categories,
   inMonthIds,
-  startingCents,
   budgets,
+  expectedIncomeCents,
   copiedFrom,
 }: {
   month: MonthKey;
   /** Every active category; `inMonthIds` are the ones in this month's plan when the form opened. */
   categories: Category[];
   inMonthIds: string[];
-  startingCents: number | null;
   budgets: Record<string, number>;
+  expectedIncomeCents: number;
   copiedFrom: MonthKey | null;
 }) {
   const db = useSQLiteContext();
   const theme = useTheme();
-  const [startingText, setStartingText] = useState(
-    startingCents === null ? '' : centsToInputText(startingCents),
+  const [incomeText, setIncomeText] = useState(
+    expectedIncomeCents > 0 ? centsToInputText(expectedIncomeCents) : '',
   );
   const [budgetTexts, setBudgetTexts] = useState<Record<string, string>>(() =>
     Object.fromEntries(
@@ -90,13 +91,14 @@ function PlanForm({
   const available = categories.filter((c) => !includedIds.includes(c.id));
   const budgetText = (id: string) => budgetTexts[id] ?? '';
 
-  const starting = parseAmountToCents(startingText);
   // An empty budget field means 0.
   const parsedBudgets = included.map((c) => ({
     categoryId: c.id,
     amountCents: budgetText(c.id).trim() === '' ? 0 : parseAmountToCents(budgetText(c.id)),
   }));
-  const invalid = starting === null || parsedBudgets.some((b) => b.amountCents === null);
+  // An empty salary field means none is expected.
+  const expectedIncome = incomeText.trim() === '' ? 0 : parseAmountToCents(incomeText);
+  const invalid = expectedIncome === null || parsedBudgets.some((b) => b.amountCents === null);
   const totalBudget = parsedBudgets.reduce((sum, b) => sum + (b.amountCents ?? 0), 0);
 
   async function save() {
@@ -104,7 +106,7 @@ function PlanForm({
     try {
       await saveMonthPlan(db, {
         month,
-        startingBalanceCents: starting,
+        expectedIncomeCents: expectedIncome,
         budgets: parsedBudgets.map((b) => ({ categoryId: b.categoryId, amountCents: b.amountCents ?? 0 })),
         // Only categories that would otherwise be in this month need to be recorded as removed.
         removedCategoryIds: available
@@ -140,13 +142,21 @@ function PlanForm({
       ) : null}
 
       <Field
-        label="Money at the start of the month"
-        value={startingText}
-        onChangeText={setStartingText}
+        label="Expected salary this month"
+        value={incomeText}
+        onChangeText={setIncomeText}
         keyboardType="decimal-pad"
         placeholder="0.00"
-        autoFocus={startingCents === null}
       />
+      {expectedIncome === null ? (
+        <ThemedText type="small" style={{ color: theme.critical }}>
+          Enter an amount like 2500.00
+        </ThemedText>
+      ) : (
+        <ThemedText type="small" themeColor="textSecondary">
+          What you expect to receive. It counts in the planned end until you log the real income.
+        </ThemedText>
+      )}
 
       <SectionLabel>Budget per category</SectionLabel>
       <Card style={{ gap: 0, paddingVertical: 4 }}>
@@ -213,17 +223,25 @@ function PlanForm({
           </ThemedText>
           <Money cents={totalBudget} type="smallBold" />
         </View>
-        {starting !== null ? (
-          <View style={styles.total}>
-            <ThemedText type="small" themeColor="textSecondary">
-              Left at the end if you stick to it
-            </ThemedText>
-            <Money
-              cents={starting - totalBudget}
-              type="smallBold"
-              color={starting - totalBudget < 0 ? theme.critical : theme.good}
-            />
-          </View>
+        {expectedIncome ? (
+          <>
+            <View style={styles.total}>
+              <ThemedText type="small" themeColor="textSecondary">
+                Expected salary
+              </ThemedText>
+              <Money cents={expectedIncome} type="smallBold" />
+            </View>
+            <View style={styles.total}>
+              <ThemedText type="small" themeColor="textSecondary">
+                {expectedIncome - totalBudget < 0 ? 'Budgeted over the salary' : 'Salary left unassigned'}
+              </ThemedText>
+              <Money
+                cents={Math.abs(expectedIncome - totalBudget)}
+                type="smallBold"
+                color={expectedIncome - totalBudget < 0 ? theme.critical : theme.good}
+              />
+            </View>
+          </>
         ) : null}
       </Card>
 
