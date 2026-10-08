@@ -23,6 +23,9 @@ export async function exportBackup(db: Db): Promise<Backup> {
  */
 export async function restoreBackup(db: Db, backup: Backup): Promise<void> {
   await db.withTransactionAsync(async () => {
+    // A credit card points at another row of its own table, which may come later in the file.
+    // Checking foreign keys once at the end of the transaction makes the row order irrelevant.
+    await db.execAsync('PRAGMA defer_foreign_keys = ON');
     // Children first, so no row is deleted while another still points at it.
     for (const table of [...BACKUP_TABLES].reverse()) {
       await db.runAsync(`DELETE FROM ${table}`, []);

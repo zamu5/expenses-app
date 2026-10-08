@@ -21,6 +21,7 @@ import {
 } from '@/components/ui';
 import { PEOPLE } from '@/config';
 import { listExpenses } from '@/db/repositories/expenses';
+import { listIncomes } from '@/db/repositories/incomes';
 import { setBudget } from '@/db/repositories/months';
 import type { CategorySummary } from '@/domain/budget';
 import { formatDay, formatMonth } from '@/domain/dates';
@@ -36,6 +37,7 @@ export default function CategoryDetailScreen() {
   const month = useUiStore((s) => s.selectedMonth);
   const { data: view } = useMonthSummary(month);
   const { data: expenses } = useDbQuery((db) => listExpenses(db, month, id), [month, id]);
+  const { data: refunds } = useDbQuery((db) => listIncomes(db, month, id), [month, id]);
   const theme = useTheme();
 
   const category = view?.summary.categories.find((c) => c.id === id);
@@ -44,7 +46,7 @@ export default function CategoryDetailScreen() {
   return (
     <ThemedView style={{ flex: 1 }}>
       <Stack.Screen options={{ title: category.name }} />
-      <Screen tabs>
+      <Screen tabs header>
         <ThemedText type="small" themeColor="textSecondary">
           {formatMonth(month)} · {category.isFixed ? 'Fixed cost' : 'Variable cost'}
         </ThemedText>
@@ -61,6 +63,33 @@ export default function CategoryDetailScreen() {
         ) : (
           <Button title="Plan this month first" variant="secondary" onPress={() => router.push('/plan')} />
         )}
+
+        {refunds && refunds.length > 0 ? (
+          <>
+            <SectionLabel>Refunds</SectionLabel>
+            <Card style={{ gap: 0, paddingVertical: 4 }}>
+              {refunds.map((r, i) => (
+                <Pressable
+                  key={r.id}
+                  onPress={() => router.push({ pathname: '/income', params: { id: r.id } })}
+                  style={({ pressed }) => [
+                    styles.row,
+                    i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.separator },
+                    { opacity: pressed ? 0.6 : 1 },
+                  ]}>
+                  <View style={{ flex: 1 }}>
+                    <ThemedText>{formatDay(r.receivedOn)}</ThemedText>
+                    <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+                      Refund{r.forWhom === 'shared' ? ' · shared' : r.forWhom === 'adriana' ? ` · for ${PEOPLE.adriana}` : ''}
+                      {r.note ? ` · ${r.note}` : ''}
+                    </ThemedText>
+                  </View>
+                  <Money cents={-r.amountCents} color={theme.good} />
+                </Pressable>
+              ))}
+            </Card>
+          </>
+        ) : null}
 
         <SectionLabel>Expenses</SectionLabel>
         {expenses && expenses.length === 0 ? (
@@ -106,11 +135,12 @@ export default function CategoryDetailScreen() {
 
 function Overview({ category: c }: { category: CategorySummary }) {
   const color = useStatusColor(c.status);
-  const ratio = c.budgetCents > 0 ? c.spentCents / c.budgetCents : c.spentCents > 0 ? 1 : 0;
+  const spent = Math.max(0, c.spentCents);
+  const ratio = c.budgetCents > 0 ? spent / c.budgetCents : spent > 0 ? 1 : 0;
   return (
     <Card style={{ gap: 12 }}>
       <View style={styles.between}>
-        <Money cents={c.spentCents} type="subtitle" />
+        <Money cents={Math.max(0, c.spentCents)} type="subtitle" />
         <StatusPill status={c.status} />
       </View>
       <ProgressBar ratio={ratio} color={color} />
@@ -121,6 +151,7 @@ function Overview({ category: c }: { category: CategorySummary }) {
       </View>
       <ThemedText type="small" themeColor="textSecondary">
         Counts your share only: half of shared expenses, none of what was only for {PEOPLE.adriana}.
+        Refunds are taken off.
       </ThemedText>
       {c.pace !== null ? (
         <ThemedText type="small" themeColor="textSecondary">

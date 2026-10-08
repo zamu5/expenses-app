@@ -10,6 +10,7 @@ import {
   type TextInputProps,
   type ViewStyle,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { CURRENCY } from '@/config';
@@ -19,15 +20,28 @@ import { formatCents } from '@/domain/money';
 import { useTheme } from '@/hooks/use-theme';
 
 /** A scrolling page with consistent padding. `tabs` leaves room for the tab bar and the + button. */
-export function Screen({ children, tabs = false }: { children: ReactNode; tabs?: boolean }) {
+export function Screen({
+  children,
+  tabs = false,
+  header = !tabs,
+}: {
+  children: ReactNode;
+  tabs?: boolean;
+  /** Whether a navigation header sits above this screen. Tab screens have none. */
+  header?: boolean;
+}) {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   return (
     <ScrollView
       style={{ backgroundColor: theme.background }}
-      contentInsetAdjustmentBehavior="automatic"
+      // Without a header the screen keeps clear of the status bar itself; relying on the automatic
+      // inset left the content under the clock on the iPhone.
+      contentInsetAdjustmentBehavior={header ? 'automatic' : 'never'}
       keyboardShouldPersistTaps="handled"
       contentContainerStyle={[
         styles.screen,
+        !header && { paddingTop: insets.top + Spacing.three },
         tabs && { paddingBottom: BottomTabInset + Spacing.six + Spacing.four },
       ]}>
       {children}

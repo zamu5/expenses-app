@@ -41,6 +41,8 @@ export interface Expense {
   note: string | null;
   paidBy: Person;
   forWhom: ForWhom;
+  /** The account or credit card it was paid with, whose balance it lowered. Null when not tracked. */
+  paymentAccountId: string | null;
 }
 
 /** Money received: a salary, a refund. It raises the month's balance; it is not a negative expense. */
@@ -49,9 +51,20 @@ export interface Income {
   amountCents: number;
   receivedOn: string;
   note: string | null;
+  /**
+   * Set for a refund: the category whose spending this money gives back. A refund lowers that
+   * category's spending and is not counted as income.
+   */
+  categoryId: string | null;
+  /** For a refund: whose spending it gives back. Shared means half of it belongs to the other person. */
+  forWhom: ForWhom;
+  /** The account the money went into, whose balance it was added to. Null when none was picked. */
+  accountId: string | null;
 }
 
 export type AccountKind = 'account' | 'planned';
+/** A bank account is money you pay with; an investment account is money put aside. */
+export type AccountType = 'bank' | 'investment';
 
 /**
  * Somewhere money is (kind 'account'), or an expense you expect but have not tied to a month
@@ -61,11 +74,22 @@ export interface Account {
   id: string;
   name: string;
   kind: AccountKind;
+  /** Only meaningful for kind 'account'. Credit cards are bank accounts with a linked account. */
+  accountType: AccountType;
   /** ISO 4217 code, e.g. 'CAD' or 'COP'. */
   currency: string;
   balanceCents: number;
   /** Whether this account counts toward "Started with" on the Month tab. Planned expenses always subtract. */
   includeInStart: boolean;
+  /** The account pre-selected when logging an income. At most one. */
+  isIncomeDefault: boolean;
+  /**
+   * Set on a credit card: the bank account it is paid from. A card's balance is negative,
+   * because it is money owed.
+   */
+  linkedAccountId: string | null;
+  /** The account or card pre-selected as "Paid with" on a new expense. At most one. */
+  isPaymentDefault: boolean;
   /** Day the balance was last typed in. */
   balanceUpdatedOn: string;
 }

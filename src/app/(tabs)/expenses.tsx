@@ -123,7 +123,7 @@ export default function ExpensesScreen() {
         ) : null}
 
         {/* Income has no category or payer, so it only shows when no filter is on. */}
-        {data && filter === ALL && !isSplitFiltered ? <IncomeList incomes={data.incomes} /> : null}
+        {data && filter === ALL && !isSplitFiltered ? <IncomeList incomes={data.incomes} categoryNames={categoryName} /> : null}
 
         {data && expenses.length === 0 ? (
           data.expenses.length === 0 ? (

@@ -1,4 +1,12 @@
-import { computeMonthSummary, leftToSpendCents, summarizeCategory, type CategoryInput } from './budget';
+import {
+  computeMonthSummary,
+  explainMonthStatus,
+  isPaidInFull,
+  leftToSpendCents,
+  sortPaidLast,
+  summarizeCategory,
+  type CategoryInput,
+} from './budget';
 
 // The worked example from the plan: October 2026, today is the 7th, starting with 3,000.00.
 const october: CategoryInput[] = [
@@ -161,5 +169,56 @@ describe('expected income', () => {
   it('gives way to what was really received when that is more', () => {
     const summary = computeMonthSummary({ ...base, expectedIncomeCents: 250000, incomeCents: 260000 });
     expect(summary.plannedEndCents).toBe(300000 + 260000 - 195000);
+  });
+});
+
+describe('explainMonthStatus', () => {
+  const summarize = (categories: CategoryInput[], startingBalanceCents = 300000) =>
+    computeMonthSummary({ startingBalanceCents, categories, daysInMonth: 31, daysElapsed: 7 });
+  const format = (cents: number) => (cents / 100).toFixed(2);
+
+  it('names the categories that are over budget and by how much', () => {
+    const over = october.map((c) =>
+      c.id === 'fun' ? { ...c, spentCents: 22300 } : c.id === 'transport' ? { ...c, spentCents: 15800 } : c,
+    );
+    expect(explainMonthStatus(summarize(over), format)).toBe(
+      'Watch: over budget in Transport (by 8.00), Fun (by 23.00).',
+    );
+  });
+
+  it('says how far below zero the planned end is', () => {
+    // 1,000 to start with against 1,950 of budgets.
+    expect(explainMonthStatus(summarize(october, 100000), format)).toMatch(/^Danger: .*below zero by 950\.00\./);
+  });
+
+  it('explains on track', () => {
+    expect(explainMonthStatus(summarize(october), format)).toMatch(/^On track: /);
+  });
+});
+
+describe('paid fixed costs', () => {
+  const c = (id: string, isFixed: boolean, budgetCents: number, spentCents: number) => ({ id, isFixed, budgetCents, spentCents });
+
+  it('is paid in full only for a fixed cost that reached its budget', () => {
+    expect(isPaidInFull(c('rent', true, 120000, 120000))).toBe(true);
+    expect(isPaidInFull(c('rent', true, 120000, 125000))).toBe(true);
+    expect(isPaidInFull(c('rent', true, 120000, 60000))).toBe(false);
+    // A variable category that used its whole budget is not "done": it can still be overspent.
+    expect(isPaidInFull(c('fun', false, 20000, 20000))).toBe(false);
+    // No budget means nothing was due.
+    expect(isPaidInFull(c('gym', true, 0, 0))).toBe(false);
+  });
+
+  it('moves them to the end and keeps everything else in order', () => {
+    const list = [
+      c('rent', true, 120000, 120000),
+      c('groceries', false, 40000, 12000),
+      c('internet', true, 8000, 8000),
+      c('insurance', true, 60000, 0),
+      c('fun', false, 20000, 20000),
+    ];
+    expect(sortPaidLast(list).map((x) => x.id)).toEqual(['groceries', 'insurance', 'fun', 'rent', 'internet']);
+    // The original list is left alone.
+    expect(list[0].id).toBe('rent');
   });
 });

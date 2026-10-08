@@ -10,7 +10,13 @@ import { listDebtExpenses } from '@/db/repositories/expenses';
 import { addSettlement, deleteSettlement, listSettlements } from '@/db/repositories/settlements';
 import { formatDay, todayISO } from '@/domain/dates';
 import { centsToInputText, parseAmountToCents } from '@/domain/money';
-import { expenseDebt, otherPerson, type Person, type SplitTotals } from '@/domain/split';
+import {
+  BUDGET_OWNER,
+  expenseDebt,
+  otherPerson,
+  type Person,
+  type SplitTotals,
+} from '@/domain/split';
 import { useBalance } from '@/hooks/use-balance';
 import { useDbQuery } from '@/hooks/use-db-query';
 import { useTheme } from '@/hooks/use-theme';
@@ -146,6 +152,9 @@ function Breakdown({ totals, person }: { totals: SplitTotals; person: Person }) 
       {line('Shared expenses', totals.sharedPaidBy[person])}
       {line(`Expenses only for ${other}`, totals.paidForOtherBy[person])}
       {line(`Paid back to ${other}`, totals.settledBy[person])}
+      {person === BUDGET_OWNER && totals.refundsOwedToOther > 0
+        ? line(`${other}'s part of refunds received`, -totals.refundsOwedToOther)
+        : null}
     </View>
   );
 }

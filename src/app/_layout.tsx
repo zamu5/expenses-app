@@ -29,7 +29,9 @@ export default function RootLayout() {
           <Stack.Screen name="expense" options={{ presentation: 'modal', title: 'Expense' }} />
           <Stack.Screen name="income" options={{ presentation: 'modal', title: 'Income' }} />
           <Stack.Screen name="account-edit" options={{ presentation: 'modal', title: '' }} />
+          <Stack.Screen name="pay-card" options={{ presentation: 'modal', title: 'Pay credit card' }} />
           <Stack.Screen name="plan" options={{ presentation: 'modal', title: 'Plan month' }} />
+          <Stack.Screen name="categories" options={{ presentation: 'modal', title: 'Categories' }} />
           <Stack.Screen name="category-edit" options={{ presentation: 'modal', title: 'Category' }} />
           <Stack.Screen name="balance" options={{ presentation: 'modal', title: 'Balance' }} />
           <Stack.Screen name="settings" options={{ presentation: 'modal', title: 'Backup' }} />

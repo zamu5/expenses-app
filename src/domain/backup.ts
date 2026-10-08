@@ -11,10 +11,10 @@ export const BACKUP_TABLES = [
   'months',
   'categories',
   'category_budgets',
+  'accounts',
   'expenses',
   'incomes',
   'settlements',
-  'accounts',
   'exchange_rates',
 ] as const;
 

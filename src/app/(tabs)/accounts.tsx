@@ -77,7 +77,9 @@ export default function AccountsScreen() {
       <AccountList
         accounts={accounts}
         hint={(a) =>
-          `Updated ${formatDay(a.balanceUpdatedOn)}${a.includeInStart ? '' : ' · not in starting balance'}`
+          a.linkedAccountId
+            ? `Credit card · paid from ${accounts.find((b) => b.id === a.linkedAccountId)?.name ?? 'an account'}`
+            : `${a.accountType === 'investment' ? 'Investment · ' : ''}Updated ${formatDay(a.balanceUpdatedOn)}${a.includeInStart ? '' : ' · not in starting balance'}`
         }
       />
       <Card style={{ gap: 0, paddingVertical: 4 }}>
@@ -161,6 +163,19 @@ function AccountList({
             currency={a.currency}
             color={negative || a.balanceCents < 0 ? theme.critical : undefined}
           />
+          {/* A credit card can be paid straight from its row. */}
+          {a.linkedAccountId ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Pay ${a.name}`}
+              hitSlop={8}
+              onPress={() => router.push({ pathname: '/pay-card', params: { id: a.id } })}
+              style={({ pressed }) => [styles.payButton, { backgroundColor: theme.tint, opacity: pressed ? 0.7 : 1 }]}>
+              <ThemedText type="smallBold" style={{ color: '#ffffff' }}>
+                Pay
+              </ThemedText>
+            </Pressable>
+          ) : null}
         </Pressable>
       ))}
     </Card>
@@ -236,6 +251,7 @@ function RateEditor({ currency, rate }: { currency: string; rate?: ExchangeRate 
 }
 
 const styles = StyleSheet.create({
+  payButton: { borderRadius: 999, paddingHorizontal: 14, paddingVertical: 6 },
   between: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10 },
 });

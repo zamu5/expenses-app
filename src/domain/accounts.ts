@@ -89,6 +89,24 @@ export function computeStartedWith(
   );
 }
 
+/**
+ * Money that moved through the accounts during the month and is already inside their balances:
+ * income and refunds paid in, or (called with expenses) payments taken out. Undoing it gives what
+ * the month really started with, so nothing is counted twice.
+ */
+export function depositsIntoStartCents(
+  deposits: { accountId: string | null; amountCents: Cents }[],
+  accounts: { id: string; kind: 'account' | 'planned'; includeInStart: boolean }[],
+): Cents {
+  const counted = new Set(
+    accounts.filter((a) => a.kind === 'account' && a.includeInStart).map((a) => a.id),
+  );
+  return deposits.reduce(
+    (total, d) => total + (d.accountId && counted.has(d.accountId) ? d.amountCents : 0),
+    0,
+  );
+}
+
 /** Cleans what the user typed into an ISO 4217 code, or null when it is not three letters. */
 export function parseCurrencyCode(input: string): string | null {
   const code = input.trim().toUpperCase();

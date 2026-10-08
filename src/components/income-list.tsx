@@ -8,13 +8,20 @@ import { formatDay } from '@/domain/dates';
 import { useTheme } from '@/hooks/use-theme';
 
 /** The month's income, one row each. Tapping a row opens it to change the amount or delete it. */
-export function IncomeList({ incomes }: { incomes: Income[] }) {
+export function IncomeList({
+  incomes,
+  categoryNames,
+}: {
+  incomes: Income[];
+  /** Category names by id, to label refunds. */
+  categoryNames?: Map<string, string>;
+}) {
   const theme = useTheme();
   if (incomes.length === 0) return null;
   return (
     <View style={{ gap: 6 }}>
       <View style={styles.between}>
-        <SectionLabel>Income · tap to edit</SectionLabel>
+        <SectionLabel>Income and refunds · tap to edit</SectionLabel>
         <Money
           cents={incomes.reduce((sum, i) => sum + i.amountCents, 0)}
           type="small"
@@ -34,9 +41,12 @@ export function IncomeList({ incomes }: { incomes: Income[] }) {
               { opacity: pressed ? 0.6 : 1 },
             ]}>
             <View style={{ flex: 1 }}>
-              <ThemedText>{income.note ?? 'Income'}</ThemedText>
+              <ThemedText>{income.note ?? (income.categoryId ? 'Refund' : 'Income')}</ThemedText>
               <ThemedText type="small" themeColor="textSecondary">
                 {formatDay(income.receivedOn)}
+                {income.categoryId
+                  ? ` · refund for ${categoryNames?.get(income.categoryId) ?? 'a category'}`
+                  : ''}
               </ThemedText>
             </View>
             <ThemedText style={{ color: theme.good }}>+</ThemedText>

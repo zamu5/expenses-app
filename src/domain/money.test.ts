@@ -1,4 +1,4 @@
-import { centsToInputText, parseAmountToCents } from './money';
+import { centsToInputText, parseAmountToCents, splitOffPart } from './money';
 
 describe('parseAmountToCents', () => {
   it.each([
@@ -28,5 +28,19 @@ describe('centsToInputText', () => {
   it('round-trips with parseAmountToCents', () => {
     expect(centsToInputText(123456)).toBe('1234.56');
     expect(parseAmountToCents(centsToInputText(5))).toBe(5);
+  });
+});
+
+describe('splitOffPart', () => {
+  it('leaves the rest in the first category', () => {
+    expect(splitOffPart(20000, 5000)).toEqual({ restCents: 15000, partCents: 5000 });
+    expect(splitOffPart(10001, 1)).toEqual({ restCents: 10000, partCents: 1 });
+  });
+
+  it('refuses a part that is zero, negative, the whole amount or more', () => {
+    expect(splitOffPart(20000, 0)).toBeNull();
+    expect(splitOffPart(20000, -5)).toBeNull();
+    expect(splitOffPart(20000, 20000)).toBeNull();
+    expect(splitOffPart(20000, 25000)).toBeNull();
   });
 });

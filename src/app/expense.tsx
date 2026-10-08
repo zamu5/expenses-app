@@ -6,17 +6,32 @@ import { Alert, StyleSheet, View } from 'react-native';
 import { DateField } from '@/components/date-field';
 import { ThemedText } from '@/components/themed-text';
 import { Button, Chips, Field, Screen, SectionLabel } from '@/components/ui';
-import { PEOPLE } from '@/config';
+import { CURRENCY, PEOPLE } from '@/config';
+import { listAccounts } from '@/db/repositories/accounts';
 import { listCategories, listCategoriesForMonth } from '@/db/repositories/categories';
-import { addExpense, deleteExpense, getExpense, updateExpense } from '@/db/repositories/expenses';
-import type { Category, Expense } from '@/db/types';
+import {
+  addExpense,
+  deleteExpense,
+  getExpense,
+  saveExpenseWithPart,
+  updateExpense,
+} from '@/db/repositories/expenses';
+import type { Account, Category, Expense } from '@/db/types';
 import { monthKeyOf, todayISO } from '@/domain/dates';
-import { centsToInputText, parseAmountToCents } from '@/domain/money';
-import type { ForWhom, Person } from '@/domain/split';
+import { centsToInputText, parseAmountToCents, splitOffPart } from '@/domain/money';
+import { BUDGET_OWNER, type ForWhom, type Person } from '@/domain/split';
 import { useDbQuery } from '@/hooks/use-db-query';
 import { useTheme } from '@/hooks/use-theme';
 import { confirmDestructive } from '@/lib/confirm';
 import { useUiStore } from '@/store/ui';
+
+const NO_METHOD = 'none';
+
+const FOR_WHOM_OPTIONS: { value: ForWhom; label: string }[] = [
+  { value: 'shared', label: 'Shared 50/50' },
+  { value: 'sergio', label: `Only ${PEOPLE.sergio}` },
+  { value: 'adriana', label: `Only ${PEOPLE.adriana}` },
+];
 
 /** Add a new expense, or edit one when opened with ?id=. */
 export default function ExpenseScreen() {
@@ -25,6 +40,10 @@ export default function ExpenseScreen() {
     async (db) => ({
       categories: await listCategories(db, { includeArchived: true }),
       expense: id ? await getExpense(db, id) : null,
+      // What an expense can be paid with: bank accounts and credit cards in the home currency.
+      methods: (await listAccounts(db)).filter(
+        (a) => a.kind === 'account' && a.accountType === 'bank' && a.currency === CURRENCY,
+      ),
     }),
     [id],
   );
@@ -35,6 +54,7 @@ export default function ExpenseScreen() {
     <ExpenseForm
       categories={data.categories}
       expense={data.expense}
+      methods={data.methods}
       initialCategoryId={categoryId}
     />
   );
@@ -43,10 +63,12 @@ export default function ExpenseScreen() {
 function ExpenseForm({
   categories,
   expense,
+  methods,
   initialCategoryId,
 }: {
   categories: Category[];
   expense: Expense | null;
+  methods: Account[];
   initialCategoryId?: string;
 }) {
   const db = useSQLiteContext();
@@ -67,10 +89,26 @@ function ExpenseForm({
   const [note, setNote] = useState(expense?.note ?? '');
   const [paidBy, setPaidBy] = useState<Person>(expense?.paidBy ?? lastPaidBy);
   const [forWhom, setForWhom] = useState<ForWhom>(expense?.forWhom ?? 'shared');
+  // A new expense starts on the default payment method, if one is set.
+  const [paymentAccountId, setPaymentAccountId] = useState<string | null>(
+    expense ? expense.paymentAccountId : (methods.find((m) => m.isPaymentDefault)?.id ?? null),
+  );
   const [saving, setSaving] = useState(false);
+  // Part of this purchase that belongs to another category (clothes on a groceries receipt).
+  const [partOpen, setPartOpen] = useState(false);
+  const [partText, setPartText] = useState('');
+  const [partCategoryId, setPartCategoryId] = useState<string | null>(null);
+  // Who the part was for. Null means the same as the rest of the purchase.
+  const [partForWhom, setPartForWhom] = useState<ForWhom | null>(null);
 
   const amountCents = parseAmountToCents(amountText);
-  const canSave = amountCents !== null && amountCents > 0 && categoryId !== null && !saving;
+  const partCents = parseAmountToCents(partText);
+  const part =
+    partOpen && amountCents !== null && partCents !== null ? splitOffPart(amountCents, partCents) : null;
+  // With the split open, both its amount and its category must be valid before saving.
+  const partReady = !partOpen || (part !== null && partCategoryId !== null && partCategoryId !== categoryId);
+  const canSave =
+    amountCents !== null && amountCents > 0 && categoryId !== null && partReady && !saving;
 
   // The picker offers the categories in the plan of the month the expense falls in,
   // plus the one already selected (it may be archived, or not part of that month).
@@ -88,9 +126,24 @@ function ExpenseForm({
   async function save() {
     if (!canSave) return;
     setSaving(true);
-    const input = { categoryId, amountCents, spentOn, note, paidBy, forWhom };
+    const input = {
+      categoryId,
+      amountCents,
+      spentOn,
+      note,
+      paidBy,
+      forWhom,
+      // Only the owner's own accounts and cards are tracked.
+      paymentAccountId: paidBy === BUDGET_OWNER ? paymentAccountId : null,
+    };
     try {
-      if (expense) await updateExpense(db, expense.id, input);
+      if (part && partCategoryId) {
+        await saveExpenseWithPart(db, expense?.id ?? null, input, {
+          categoryId: partCategoryId,
+          amountCents: part.partCents,
+          forWhom: partForWhom ?? forWhom,
+        });
+      } else if (expense) await updateExpense(db, expense.id, input);
       else await addExpense(db, input);
       setLastPaidBy(paidBy);
       router.back();
@@ -128,6 +181,56 @@ function ExpenseForm({
       <SectionLabel>Category</SectionLabel>
       <Chips options={options} value={categoryId} onChange={setCategoryId} />
 
+      {partOpen ? (
+        <View style={{ gap: 8 }}>
+          <Field
+            label="How much of it goes to another category"
+            value={partText}
+            onChangeText={setPartText}
+            keyboardType="decimal-pad"
+            placeholder="0.00"
+          />
+          <Chips
+            options={options.filter((o) => o.value !== categoryId)}
+            value={partCategoryId}
+            onChange={setPartCategoryId}
+          />
+          <SectionLabel>That part is for</SectionLabel>
+          <Chips
+            options={FOR_WHOM_OPTIONS}
+            value={partForWhom ?? forWhom}
+            onChange={setPartForWhom}
+          />
+          {part ? (
+            <ThemedText type="small" themeColor="textSecondary">
+              {selected?.name ?? 'First category'} {centsToInputText(part.restCents)}
+              {' · '}
+              {categories.find((c) => c.id === partCategoryId)?.name ?? 'other category'}{' '}
+              {centsToInputText(part.partCents)}
+              {(partForWhom ?? forWhom) !== forWhom
+                ? ` (${FOR_WHOM_OPTIONS.find((o) => o.value === partForWhom)?.label})`
+                : ''}
+            </ThemedText>
+          ) : partText !== '' ? (
+            <ThemedText type="small" style={{ color: theme.critical }}>
+              Enter an amount smaller than the total.
+            </ThemedText>
+          ) : null}
+          <Button
+            title="Do not split"
+            variant="secondary"
+            onPress={() => {
+              setPartOpen(false);
+              setPartText('');
+              setPartCategoryId(null);
+              setPartForWhom(null);
+            }}
+          />
+        </View>
+      ) : (
+        <Button title="Split with another category" variant="secondary" onPress={() => setPartOpen(true)} />
+      )}
+
       <SectionLabel>Paid by</SectionLabel>
       <Chips
         options={[
@@ -138,13 +241,23 @@ function ExpenseForm({
         onChange={setPaidBy}
       />
 
+      {paidBy === BUDGET_OWNER && methods.length > 0 ? (
+        <>
+          <SectionLabel>Paid with</SectionLabel>
+          <Chips
+            options={[
+              ...methods.map((m) => ({ value: m.id, label: m.linkedAccountId ? `${m.name} (card)` : m.name })),
+              { value: NO_METHOD, label: 'Not tracked' },
+            ]}
+            value={paymentAccountId ?? NO_METHOD}
+            onChange={(value) => setPaymentAccountId(value === NO_METHOD ? null : value)}
+          />
+        </>
+      ) : null}
+
       <SectionLabel>For</SectionLabel>
       <Chips
-        options={[
-          { value: 'shared', label: 'Shared 50/50' },
-          { value: 'sergio', label: `Only ${PEOPLE.sergio}` },
-          { value: 'adriana', label: `Only ${PEOPLE.adriana}` },
-        ]}
+        options={FOR_WHOM_OPTIONS}
         value={forWhom}
         onChange={setForWhom}
       />
