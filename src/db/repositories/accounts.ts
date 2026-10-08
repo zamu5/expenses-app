@@ -10,6 +10,7 @@ interface AccountRow {
   currency: string;
   balance_cents: number;
   is_budget_account: number;
+  include_in_start: number;
   balance_updated_on: string;
 }
 
@@ -20,10 +21,12 @@ const toAccount = (r: AccountRow): Account => ({
   currency: r.currency,
   balanceCents: r.balance_cents,
   isBudgetAccount: r.is_budget_account === 1,
+  includeInStart: r.include_in_start === 1,
   balanceUpdatedOn: r.balance_updated_on,
 });
 
-const COLUMNS = 'id, name, kind, currency, balance_cents, is_budget_account, balance_updated_on';
+const COLUMNS =
+  'id, name, kind, currency, balance_cents, is_budget_account, include_in_start, balance_updated_on';
 
 /** Accounts first, then planned expenses, each in the order they were added. */
 export async function listAccounts(db: Db): Promise<Account[]> {
@@ -49,6 +52,8 @@ export interface AccountInput {
   currency: string;
   balanceCents: number;
   isBudgetAccount?: boolean;
+  /** Defaults to true. */
+  includeInStart?: boolean;
   /** Day the balance was typed, 'YYYY-MM-DD'. */
   balanceUpdatedOn: string;
 }
@@ -68,9 +73,9 @@ export async function createAccount(db: Db, input: AccountInput): Promise<string
   await db.withTransactionAsync(async () => {
     await db.runAsync(
       `INSERT INTO accounts
-         (id, name, kind, currency, balance_cents, is_budget_account, balance_updated_on,
-          sort_order, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), -1) + 1 FROM accounts), ?, ?)`,
+         (id, name, kind, currency, balance_cents, is_budget_account, include_in_start,
+          balance_updated_on, sort_order, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), -1) + 1 FROM accounts), ?, ?)`,
       [
         id,
         input.name.trim(),
@@ -78,6 +83,7 @@ export async function createAccount(db: Db, input: AccountInput): Promise<string
         input.currency,
         input.balanceCents,
         isBudget ? 1 : 0,
+        (input.includeInStart ?? true) ? 1 : 0,
         input.balanceUpdatedOn,
         now,
         now,
@@ -95,9 +101,18 @@ export async function updateAccount(db: Db, id: string, input: AccountInput): Pr
   await db.withTransactionAsync(async () => {
     await db.runAsync(
       `UPDATE accounts SET name = ?, currency = ?, balance_cents = ?, is_budget_account = ?,
-         balance_updated_on = ?, updated_at = ?
+         include_in_start = ?, balance_updated_on = ?, updated_at = ?
        WHERE id = ?`,
-      [input.name.trim(), input.currency, input.balanceCents, isBudget ? 1 : 0, input.balanceUpdatedOn, now, id],
+      [
+        input.name.trim(),
+        input.currency,
+        input.balanceCents,
+        isBudget ? 1 : 0,
+        (input.includeInStart ?? true) ? 1 : 0,
+        input.balanceUpdatedOn,
+        now,
+        id,
+      ],
     );
     if (isBudget) await clearBudgetAccount(db, id, now);
   });

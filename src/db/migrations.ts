@@ -149,6 +149,11 @@ const migrations: ((db: Db) => Promise<void>)[] = [
       );
     `);
   },
+
+  // Version 5: each account says whether it counts toward what a month starts with.
+  async (db) => {
+    await db.execAsync('ALTER TABLE accounts ADD COLUMN include_in_start INTEGER NOT NULL DEFAULT 1;');
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = migrations.length;

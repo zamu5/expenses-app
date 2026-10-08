@@ -60,6 +60,7 @@ function AccountForm({
   const [currencyText, setCurrencyText] = useState(account?.currency ?? CURRENCY);
   const [balanceText, setBalanceText] = useState(account ? centsToInputText(account.balanceCents) : '');
   const [isBudgetAccount, setIsBudgetAccount] = useState(account?.isBudgetAccount ?? false);
+  const [includeInStart, setIncludeInStart] = useState(account?.includeInStart ?? true);
 
   const currency = parseCurrencyCode(currencyText);
   // The budget account's balance comes from the monthly budget, so nothing is typed for it.
@@ -74,6 +75,7 @@ function AccountForm({
       currency: isBudgetAccount ? CURRENCY : currency,
       balanceCents,
       isBudgetAccount,
+      includeInStart,
       // Keep the "updated" day unless the balance itself changed.
       balanceUpdatedOn:
         account && account.balanceCents === balanceCents ? account.balanceUpdatedOn : todayISO(),
@@ -153,6 +155,16 @@ function AccountForm({
           ) : null}
         </>
       )}
+
+      {/* The budget account always counts (through the month's plan); planned expenses always subtract. */}
+      {!isPlanned && !isBudgetAccount ? (
+        <ToggleRow
+          label="Include in starting balance"
+          hint={'Counts toward "Started with" on the Month tab.'}
+          value={includeInStart}
+          onValueChange={setIncludeInStart}
+        />
+      ) : null}
 
       <View style={{ gap: 8, marginTop: 8 }}>
         <Button title={account ? 'Save changes' : `Add ${noun}`} onPress={save} disabled={!canSave} />

@@ -81,7 +81,7 @@ export default function AccountsScreen() {
             ? data.monthView.month
               ? `Budget account · ${monthName} balance`
               : `Budget account · ${monthName} is not planned yet`
-            : `Updated ${formatDay(a.balanceUpdatedOn)}`
+            : `Updated ${formatDay(a.balanceUpdatedOn)}${a.includeInStart ? '' : ' · not in starting balance'}`
         }
       />
       <Card style={{ gap: 0, paddingVertical: 4 }}>

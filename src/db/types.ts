@@ -63,6 +63,11 @@ export interface Account {
   balanceCents: number;
   /** The one account the monthly budget lives in. Its balance comes from the budget, not from typing. */
   isBudgetAccount: boolean;
+  /**
+   * Whether this account counts toward "Started with" on the Month tab. The budget account always
+   * does (through the month's own starting balance) and planned expenses always subtract.
+   */
+  includeInStart: boolean;
   /** Day the balance was last typed in. */
   balanceUpdatedOn: string;
 }

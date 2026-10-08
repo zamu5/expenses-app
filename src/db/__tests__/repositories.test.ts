@@ -424,3 +424,32 @@ describe('the budget counts only your share', () => {
     expect(budgetAccountCents(flows)).toBe(392166);
   });
 });
+
+describe('include in starting balance', () => {
+  it('is on by default and can be switched off per account', async () => {
+    const id = await createAccount(db, { name: 'Investments', kind: 'account', currency: 'CAD', balanceCents: 1000000, balanceUpdatedOn: '2026-10-07' });
+    expect((await listAccounts(db))[0].includeInStart).toBe(true);
+
+    await updateAccount(db, id, { name: 'Investments', kind: 'account', currency: 'CAD', balanceCents: 1000000, includeInStart: false, balanceUpdatedOn: '2026-10-07' });
+    expect((await listAccounts(db))[0].includeInStart).toBe(false);
+  });
+
+  it('survives a backup and restore', async () => {
+    await createAccount(db, { name: 'Off', kind: 'account', currency: 'CAD', balanceCents: 1, includeInStart: false, balanceUpdatedOn: '2026-10-07' });
+    const parsed = parseBackup(JSON.stringify(await exportBackup(db)), LATEST_SCHEMA_VERSION);
+    if (!parsed.ok) throw new Error(parsed.error);
+    await restoreBackup(db, parsed.backup);
+    expect((await listAccounts(db))[0].includeInStart).toBe(false);
+  });
+
+  it('is switched on for accounts that existed before the flag', async () => {
+    // A backup from schema 4 has no include_in_start column; restoring fills in the default.
+    const parsed = parseBackup(JSON.stringify(await exportBackup(db)), LATEST_SCHEMA_VERSION);
+    if (!parsed.ok) throw new Error(parsed.error);
+    parsed.backup.tables.accounts = [
+      { id: 'old', name: 'Old', kind: 'account', currency: 'CAD', balance_cents: 5, is_budget_account: 0, balance_updated_on: '2026-10-01', sort_order: 0, created_at: 'x', updated_at: 'x', deleted_at: null },
+    ];
+    await restoreBackup(db, parsed.backup);
+    expect((await listAccounts(db))[0]).toMatchObject({ name: 'Old', includeInStart: true });
+  });
+});

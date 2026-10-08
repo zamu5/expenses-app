@@ -73,19 +73,19 @@ export function computeNetWorth(
 }
 
 /**
- * What a month started with across everything: every account except the budget account, plus the
- * budget account's starting balance from the month's plan, minus planned expenses.
+ * What a month started with: the budget account's starting balance from the month's plan, plus
+ * every other account marked "include in starting balance", minus every planned expense.
  * Returns a NetWorth so currencies without a rate are flagged the same way as in the total.
  */
 export function computeStartedWith(
-  accounts: (NetWorthItem & { isBudgetAccount: boolean })[],
+  accounts: (NetWorthItem & { isBudgetAccount: boolean; includeInStart: boolean })[],
   budgetStartCents: Cents,
   rates: Record<string, number>,
   homeCurrency: string,
 ): NetWorth {
   return computeNetWorth(
     [
-      ...accounts.filter((a) => !a.isBudgetAccount),
+      ...accounts.filter((a) => !a.isBudgetAccount && (a.kind === 'planned' || a.includeInStart)),
       { kind: 'account', currency: homeCurrency, balanceCents: budgetStartCents },
     ],
     rates,

@@ -112,6 +112,9 @@ currency. Nothing is predefined; you add, rename and delete accounts yourself.
 - Two more rows are worked out by the app: what the two of you owe each other, and
   **Left to spend** (the month's budget not spent yet, counted as negative).
 - The total of this tab is the **Current balance** on the Month tab.
+- **Started with** on the Month tab is the budget account's start (typed in the month's plan) plus
+  every other account with **Include in starting balance** switched on, minus planned expenses.
+  The switch does not affect the Accounts total, which always shows everything.
 - Other balances are typed in by hand, and so are exchange rates ("1 CAD = how many COP?").
   A currency without a rate is shown but left out of the total.
 
