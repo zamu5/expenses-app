@@ -8,10 +8,16 @@ import { ThemedText } from '@/components/themed-text';
 import { Button, Chips, Field, Screen, SectionLabel } from '@/components/ui';
 import { PEOPLE } from '@/config';
 import { listCategories, listCategoriesForMonth } from '@/db/repositories/categories';
-import { addExpense, deleteExpense, getExpense, updateExpense } from '@/db/repositories/expenses';
+import {
+  addExpense,
+  deleteExpense,
+  getExpense,
+  saveExpenseWithPart,
+  updateExpense,
+} from '@/db/repositories/expenses';
 import type { Category, Expense } from '@/db/types';
 import { monthKeyOf, todayISO } from '@/domain/dates';
-import { centsToInputText, parseAmountToCents } from '@/domain/money';
+import { centsToInputText, parseAmountToCents, splitOffPart } from '@/domain/money';
 import type { ForWhom, Person } from '@/domain/split';
 import { useDbQuery } from '@/hooks/use-db-query';
 import { useTheme } from '@/hooks/use-theme';
@@ -68,9 +74,19 @@ function ExpenseForm({
   const [paidBy, setPaidBy] = useState<Person>(expense?.paidBy ?? lastPaidBy);
   const [forWhom, setForWhom] = useState<ForWhom>(expense?.forWhom ?? 'shared');
   const [saving, setSaving] = useState(false);
+  // Part of this purchase that belongs to another category (clothes on a groceries receipt).
+  const [partOpen, setPartOpen] = useState(false);
+  const [partText, setPartText] = useState('');
+  const [partCategoryId, setPartCategoryId] = useState<string | null>(null);
 
   const amountCents = parseAmountToCents(amountText);
-  const canSave = amountCents !== null && amountCents > 0 && categoryId !== null && !saving;
+  const partCents = parseAmountToCents(partText);
+  const part =
+    partOpen && amountCents !== null && partCents !== null ? splitOffPart(amountCents, partCents) : null;
+  // With the split open, both its amount and its category must be valid before saving.
+  const partReady = !partOpen || (part !== null && partCategoryId !== null && partCategoryId !== categoryId);
+  const canSave =
+    amountCents !== null && amountCents > 0 && categoryId !== null && partReady && !saving;
 
   // The picker offers the categories in the plan of the month the expense falls in,
   // plus the one already selected (it may be archived, or not part of that month).
@@ -90,7 +106,12 @@ function ExpenseForm({
     setSaving(true);
     const input = { categoryId, amountCents, spentOn, note, paidBy, forWhom };
     try {
-      if (expense) await updateExpense(db, expense.id, input);
+      if (part && partCategoryId) {
+        await saveExpenseWithPart(db, expense?.id ?? null, input, {
+          categoryId: partCategoryId,
+          amountCents: part.partCents,
+        });
+      } else if (expense) await updateExpense(db, expense.id, input);
       else await addExpense(db, input);
       setLastPaidBy(paidBy);
       router.back();
@@ -127,6 +148,46 @@ function ExpenseForm({
 
       <SectionLabel>Category</SectionLabel>
       <Chips options={options} value={categoryId} onChange={setCategoryId} />
+
+      {partOpen ? (
+        <View style={{ gap: 8 }}>
+          <Field
+            label="How much of it goes to another category"
+            value={partText}
+            onChangeText={setPartText}
+            keyboardType="decimal-pad"
+            placeholder="0.00"
+          />
+          <Chips
+            options={options.filter((o) => o.value !== categoryId)}
+            value={partCategoryId}
+            onChange={setPartCategoryId}
+          />
+          {part ? (
+            <ThemedText type="small" themeColor="textSecondary">
+              {selected?.name ?? 'First category'} {centsToInputText(part.restCents)}
+              {' · '}
+              {categories.find((c) => c.id === partCategoryId)?.name ?? 'other category'}{' '}
+              {centsToInputText(part.partCents)}
+            </ThemedText>
+          ) : partText !== '' ? (
+            <ThemedText type="small" style={{ color: theme.critical }}>
+              Enter an amount smaller than the total.
+            </ThemedText>
+          ) : null}
+          <Button
+            title="Do not split"
+            variant="secondary"
+            onPress={() => {
+              setPartOpen(false);
+              setPartText('');
+              setPartCategoryId(null);
+            }}
+          />
+        </View>
+      ) : (
+        <Button title="Split with another category" variant="secondary" onPress={() => setPartOpen(true)} />
+      )}
 
       <SectionLabel>Paid by</SectionLabel>
       <Chips

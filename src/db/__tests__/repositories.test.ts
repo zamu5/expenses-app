@@ -28,6 +28,7 @@ import {
   deleteExpense,
   listDebtExpenses,
   listExpenses,
+  saveExpenseWithPart,
   updateExpense,
 } from '../repositories/expenses';
 import { addIncome, deleteIncome, getIncomeTotal, listIncomes, updateIncome } from '../repositories/incomes';
@@ -513,5 +514,39 @@ describe('expected income in the plan', () => {
   it('is zero for a month planned without it', async () => {
     await saveMonthPlan(db, { month: '2026-10', budgets: [] });
     expect((await getMonth(db, '2026-10'))?.expectedIncomeCents).toBe(0);
+  });
+});
+
+describe('one purchase in two categories', () => {
+  it('saves it as two expenses that share the date, note, payer and "for"', async () => {
+    const [groceries, fun] = await Promise.all(['Groceries', 'Fun'].map(idOf));
+    await saveExpenseWithPart(
+      db,
+      null,
+      { categoryId: groceries, amountCents: 20000, spentOn: '2026-10-05', note: 'Costco', paidBy: 'adriana', forWhom: 'shared' },
+      { categoryId: fun, amountCents: 5000 },
+    );
+    const saved = (await listExpenses(db, '2026-10')).map((e) => [e.categoryId, e.amountCents, e.note, e.paidBy, e.forWhom, e.spentOn]);
+    expect(saved).toHaveLength(2);
+    expect(saved).toContainEqual([groceries, 15000, 'Costco', 'adriana', 'shared', '2026-10-05']);
+    expect(saved).toContainEqual([fun, 5000, 'Costco', 'adriana', 'shared', '2026-10-05']);
+    // Nothing is lost or invented: what is owed is still half of the 200.00.
+    expect(balanceCents(await getSplitTotals(db))).toBe(-10000);
+  });
+
+  it('can split an expense that already exists', async () => {
+    const [groceries, fun] = await Promise.all(['Groceries', 'Fun'].map(idOf));
+    const id = await addExpense(db, { categoryId: groceries, amountCents: 20000, spentOn: '2026-10-05', note: 'Costco' });
+    await saveExpenseWithPart(db, id, { categoryId: groceries, amountCents: 20000, spentOn: '2026-10-05', note: 'Costco' }, { categoryId: fun, amountCents: 5000 });
+    expect((await listExpenses(db, '2026-10', groceries)).map((e) => [e.id, e.amountCents])).toEqual([[id, 15000]]);
+    expect((await listExpenses(db, '2026-10', fun)).map((e) => e.amountCents)).toEqual([5000]);
+  });
+
+  it('saves neither half when the other category does not exist', async () => {
+    const groceries = await idOf('Groceries');
+    await expect(
+      saveExpenseWithPart(db, null, { categoryId: groceries, amountCents: 20000, spentOn: '2026-10-05' }, { categoryId: 'nope', amountCents: 5000 }),
+    ).rejects.toThrow(/FOREIGN KEY/);
+    expect(await listExpenses(db, '2026-10')).toEqual([]);
   });
 });

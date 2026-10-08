@@ -37,3 +37,16 @@ export function centsToInputText(cents: Cents): string {
 export function formatCents(cents: Cents, currency: string, locale?: string): string {
   return new Intl.NumberFormat(locale, { style: 'currency', currency }).format(cents / 100);
 }
+
+/**
+ * Takes a part out of a total, for an expense that belongs to two categories: 100.00 with 35.00
+ * for another category leaves 65.00. Null unless the part is more than zero and less than the
+ * total, so both sides keep a real amount.
+ */
+export function splitOffPart(
+  totalCents: Cents,
+  partCents: Cents,
+): { restCents: Cents; partCents: Cents } | null {
+  if (!Number.isInteger(partCents) || partCents <= 0 || partCents >= totalCents) return null;
+  return { restCents: totalCents - partCents, partCents };
+}
