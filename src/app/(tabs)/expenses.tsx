@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { BalanceBetweenCard } from '@/components/balance-between-card';
+import { IncomeList } from '@/components/income-list';
 import { MonthSwitcher } from '@/components/month-switcher';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -122,39 +123,7 @@ export default function ExpensesScreen() {
         ) : null}
 
         {/* Income has no category or payer, so it only shows when no filter is on. */}
-        {data && filter === ALL && !isSplitFiltered && data.incomes.length > 0 ? (
-          <View style={{ gap: 6 }}>
-            <View style={styles.between}>
-              <SectionLabel>Income</SectionLabel>
-              <Money
-                cents={data.incomes.reduce((sum, i) => sum + i.amountCents, 0)}
-                type="small"
-                color={theme.good}
-              />
-            </View>
-            <Card style={{ gap: 0, paddingVertical: 4 }}>
-              {data.incomes.map((income, i) => (
-                <Pressable
-                  key={income.id}
-                  onPress={() => router.push({ pathname: '/income', params: { id: income.id } })}
-                  style={({ pressed }) => [
-                    styles.row,
-                    i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.separator },
-                    { opacity: pressed ? 0.6 : 1 },
-                  ]}>
-                  <View style={{ flex: 1 }}>
-                    <ThemedText>{income.note ?? 'Income'}</ThemedText>
-                    <ThemedText type="small" themeColor="textSecondary">
-                      {formatDay(income.receivedOn)}
-                    </ThemedText>
-                  </View>
-                  <ThemedText style={{ color: theme.good }}>+</ThemedText>
-                  <Money cents={income.amountCents} color={theme.good} />
-                </Pressable>
-              ))}
-            </Card>
-          </View>
-        ) : null}
+        {data && filter === ALL && !isSplitFiltered ? <IncomeList incomes={data.incomes} /> : null}
 
         {data && expenses.length === 0 ? (
           data.expenses.length === 0 ? (

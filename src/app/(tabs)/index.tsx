@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { BalanceBetweenCard } from '@/components/balance-between-card';
+import { IncomeList } from '@/components/income-list';
 import { MonthSwitcher } from '@/components/month-switcher';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -19,8 +20,10 @@ import {
   useStatusColor,
 } from '@/components/ui';
 import { Spacing } from '@/constants/theme';
+import { listIncomes } from '@/db/repositories/incomes';
 import type { CategorySummary } from '@/domain/budget';
 import { formatMonth } from '@/domain/dates';
+import { useDbQuery } from '@/hooks/use-db-query';
 import { useOverview } from '@/hooks/use-overview';
 import { useTheme } from '@/hooks/use-theme';
 import { useUiStore } from '@/store/ui';
@@ -29,6 +32,7 @@ export default function MonthScreen() {
   const selectedMonth = useUiStore((s) => s.selectedMonth);
   const { data: overview, error } = useOverview(selectedMonth);
   const data = overview?.monthView;
+  const { data: incomes } = useDbQuery((db) => listIncomes(db, selectedMonth), [selectedMonth]);
 
   return (
     <ThemedView style={{ flex: 1 }}>
@@ -64,6 +68,8 @@ export default function MonthScreen() {
               daysElapsed={data.daysElapsed}
               daysInMonth={data.daysInMonth}
             />
+
+            <IncomeList incomes={incomes ?? []} />
 
             <SectionLabel>Categories</SectionLabel>
             {data.summary.categories.map((c) => (
