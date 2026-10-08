@@ -14,6 +14,7 @@ export interface CategoryInput {
   /** Fixed costs (rent, subscriptions) are paid once, so their pace is meaningless. */
   isFixed: boolean;
   budgetCents: Cents;
+  /** The budget owner's share of the spending: shared expenses count half (see domain/split.ts). */
   spentCents: Cents;
 }
 
@@ -128,4 +129,12 @@ export function computeMonthSummary(input: MonthInput): MonthSummary {
     isEarlyEstimate: daysElapsed > 0 && daysElapsed < EARLY_ESTIMATE_DAYS,
     categories,
   };
+}
+
+/**
+ * Budget money not spent yet this month, added over the categories. A category that is already
+ * over budget counts as 0, not as negative: overspending one does not free money in another.
+ */
+export function leftToSpendCents(categories: Pick<CategoryInput, 'budgetCents' | 'spentCents'>[]): Cents {
+  return categories.reduce((total, c) => total + Math.max(0, c.budgetCents - c.spentCents), 0);
 }

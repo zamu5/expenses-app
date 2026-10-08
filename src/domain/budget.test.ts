@@ -1,4 +1,4 @@
-import { computeMonthSummary, summarizeCategory, type CategoryInput } from './budget';
+import { computeMonthSummary, leftToSpendCents, summarizeCategory, type CategoryInput } from './budget';
 
 // The worked example from the plan: October 2026, today is the 7th, starting with 3,000.00.
 const october: CategoryInput[] = [
@@ -108,5 +108,25 @@ describe('income', () => {
     const tight = { startingBalanceCents: 100000, categories: october, daysInMonth: 31, daysElapsed: 7 };
     expect(computeMonthSummary(tight).status).toBe('danger');
     expect(computeMonthSummary({ ...tight, incomeCents: 300000 }).status).not.toBe('danger');
+  });
+});
+
+describe('leftToSpendCents', () => {
+  it('adds what is left in each category', () => {
+    // rent 0 + groceries 280 + transport 90 + fun 170
+    expect(leftToSpendCents(october)).toBe(54000);
+  });
+
+  it('does not let an overspent category cancel out another', () => {
+    expect(
+      leftToSpendCents([
+        { budgetCents: 10000, spentCents: 15000 },
+        { budgetCents: 10000, spentCents: 4000 },
+      ]),
+    ).toBe(6000);
+  });
+
+  it('is zero with no categories', () => {
+    expect(leftToSpendCents([])).toBe(0);
   });
 });

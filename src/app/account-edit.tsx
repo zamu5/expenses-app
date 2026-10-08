@@ -110,7 +110,7 @@ function AccountForm({
       {!isPlanned ? (
         <ToggleRow
           label="Budget account"
-          hint={`The account your monthly budget is spent from. Its balance follows the budget, in ${CURRENCY}.`}
+          hint={`The account you pay from. Its balance is worked out: what the month started with, plus income, minus what you paid, in ${CURRENCY}.`}
           value={isBudgetAccount}
           onValueChange={setIsBudgetAccount}
         />

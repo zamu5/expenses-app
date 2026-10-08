@@ -1,5 +1,6 @@
 import type { CategoryInput } from '@/domain/budget';
 import type { MonthKey } from '@/domain/dates';
+import { BUDGET_OWNER, otherPerson, ownerShareCents, type BudgetAccountFlows } from '@/domain/split';
 import { newId, nowISO } from '@/lib/id';
 
 import { notifyDataChanged } from '../events';
@@ -119,7 +120,8 @@ export async function setBudget(
  * Everything the Month screen needs, ready for computeMonthSummary(): the categories in this
  * month's plan (see listCategoriesForMonth), plus any other category with spending this month,
  * so money is never hidden.
- * The database does the summing (SUM + GROUP BY); totals are never stored.
+ * `spentCents` is the budget owner's share: shared expenses count half, and expenses only for the
+ * other person count nothing. The database does the summing (SUM + GROUP BY); totals are never stored.
  */
 export async function getMonthCategoryInputs(db: Db, month: MonthKey): Promise<CategoryInput[]> {
   const rows = await db.getAllAsync<{
@@ -127,11 +129,13 @@ export async function getMonthCategoryInputs(db: Db, month: MonthKey): Promise<C
     name: string;
     is_fixed: number;
     budget_cents: number | null;
-    spent_cents: number | null;
+    any_cents: number | null;
+    own_cents: number | null;
+    shared_cents: number | null;
   }>(
     `SELECT c.id, c.name, c.is_fixed,
             CASE WHEN b.deleted_at IS NULL THEN b.amount_cents END AS budget_cents,
-            s.spent_cents
+            s.any_cents, s.own_cents, s.shared_cents
      FROM categories c
      LEFT JOIN (
        SELECT b.category_id, b.amount_cents, b.deleted_at FROM category_budgets b
@@ -139,23 +143,61 @@ export async function getMonthCategoryInputs(db: Db, month: MonthKey): Promise<C
        WHERE m.month_key = ?
      ) b ON b.category_id = c.id
      LEFT JOIN (
-       SELECT category_id, SUM(amount_cents) AS spent_cents FROM expenses
+       SELECT category_id,
+              SUM(amount_cents) AS any_cents,
+              SUM(CASE WHEN for_whom = ? THEN amount_cents ELSE 0 END) AS own_cents,
+              SUM(CASE WHEN for_whom = 'shared' THEN amount_cents ELSE 0 END) AS shared_cents
+       FROM expenses
        WHERE spent_on LIKE ? AND deleted_at IS NULL
        GROUP BY category_id
      ) s ON s.category_id = c.id
      WHERE c.deleted_at IS NULL
-       AND (s.spent_cents > 0
+       AND (s.any_cents > 0
          OR (b.category_id IS NOT NULL AND b.deleted_at IS NULL
              AND (c.archived_at IS NULL OR b.amount_cents > 0))
          OR (b.category_id IS NULL AND c.is_monthly = 1 AND c.archived_at IS NULL))
      ORDER BY c.sort_order, c.name`,
-    [month, `${month}-%`],
+    [month, BUDGET_OWNER, `${month}-%`],
   );
   return rows.map((r) => ({
     id: r.id,
     name: r.name,
     isFixed: r.is_fixed === 1,
     budgetCents: r.budget_cents ?? 0,
-    spentCents: r.spent_cents ?? 0,
+    spentCents: ownerShareCents(r.own_cents ?? 0, r.shared_cents ?? 0),
   }));
+}
+
+/**
+ * The money that moved through the budget account in one month, for budgetAccountCents():
+ * what the owner paid in full, and the payments between the two people.
+ */
+export async function getBudgetAccountFlows(db: Db, month: MonthKey): Promise<BudgetAccountFlows> {
+  const prefix = `${month}-%`;
+  const sum = async (sql: string, params: string[]) =>
+    (await db.getFirstAsync<{ total: number | null }>(sql, params))?.total ?? 0;
+
+  const existing = await getMonth(db, month);
+  return {
+    startingBalanceCents: existing?.startingBalanceCents ?? 0,
+    incomeCents: await sum(
+      'SELECT SUM(amount_cents) AS total FROM incomes WHERE deleted_at IS NULL AND received_on LIKE ?',
+      [prefix],
+    ),
+    paidByOwnerCents: await sum(
+      `SELECT SUM(amount_cents) AS total FROM expenses
+       WHERE deleted_at IS NULL AND paid_by = ? AND spent_on LIKE ?`,
+      [BUDGET_OWNER, prefix],
+    ),
+    receivedFromOtherCents: await sum(
+      `SELECT SUM(amount_cents) AS total FROM settlements
+       WHERE deleted_at IS NULL AND from_person = ? AND settled_on LIKE ?`,
+      [otherPerson(BUDGET_OWNER), prefix],
+    ),
+    paidToOtherCents: await sum(
+      `SELECT SUM(amount_cents) AS total FROM settlements
+       WHERE deleted_at IS NULL AND from_person = ? AND settled_on LIKE ?`,
+      [BUDGET_OWNER, prefix],
+    ),
+  };
 }

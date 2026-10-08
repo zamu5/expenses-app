@@ -4,7 +4,7 @@
 import { computeNetWorth } from '@/domain/accounts';
 import { parseBackup } from '@/domain/backup';
 import { computeMonthSummary } from '@/domain/budget';
-import { balanceCents } from '@/domain/split';
+import { balanceCents, budgetAccountCents } from '@/domain/split';
 
 import { subscribeToDataChanges } from '../events';
 import { LATEST_SCHEMA_VERSION, migrate } from '../migrations';
@@ -26,6 +26,7 @@ import {
 import { addExpense, deleteExpense, listExpenses, updateExpense } from '../repositories/expenses';
 import { addIncome, deleteIncome, getIncomeTotal, listIncomes, updateIncome } from '../repositories/incomes';
 import {
+  getBudgetAccountFlows,
   getBudgets,
   getMonth,
   getMonthCategoryInputs,
@@ -85,11 +86,11 @@ describe('a month end to end', () => {
         { categoryId: fun, amountCents: 20000 },
       ],
     });
-    await addExpense(db, { categoryId: rent, amountCents: 120000, spentOn: '2026-10-01' });
-    await addExpense(db, { categoryId: groceries, amountCents: 7000, spentOn: '2026-10-02' });
-    await addExpense(db, { categoryId: groceries, amountCents: 5000, spentOn: '2026-10-06' });
-    await addExpense(db, { categoryId: transport, amountCents: 6000, spentOn: '2026-10-03' });
-    await addExpense(db, { categoryId: fun, amountCents: 3000, spentOn: '2026-10-05' });
+    await addExpense(db, { categoryId: rent, amountCents: 120000, spentOn: '2026-10-01', forWhom: 'sergio' });
+    await addExpense(db, { categoryId: groceries, amountCents: 7000, spentOn: '2026-10-02', forWhom: 'sergio' });
+    await addExpense(db, { categoryId: groceries, amountCents: 5000, spentOn: '2026-10-06', forWhom: 'sergio' });
+    await addExpense(db, { categoryId: transport, amountCents: 6000, spentOn: '2026-10-03', forWhom: 'sergio' });
+    await addExpense(db, { categoryId: fun, amountCents: 3000, spentOn: '2026-10-05', forWhom: 'sergio' });
     // A September expense must not count toward October.
     await addExpense(db, { categoryId: fun, amountCents: 99900, spentOn: '2026-09-30' });
 
@@ -208,7 +209,7 @@ describe('categories that are not monthly', () => {
   it('a removed category still shows when money was spent on it', async () => {
     const fun = await idOf('Fun');
     await plan('2026-10', [], [fun]);
-    await addExpense(db, { categoryId: fun, amountCents: 900, spentOn: '2026-10-03' });
+    await addExpense(db, { categoryId: fun, amountCents: 900, spentOn: '2026-10-03', forWhom: 'sergio' });
     const row = (await getMonthCategoryInputs(db, '2026-10')).find((c) => c.id === fun);
     expect(row).toMatchObject({ budgetCents: 0, spentCents: 900 });
   });
@@ -373,5 +374,53 @@ describe('backup and restore', () => {
     expect(await getLastBackupAt(db)).toBe('2026-10-08T09:00:00.000Z');
     await restoreBackup(db, await viaFile());
     expect(await getLastBackupAt(db)).toBe('2026-10-08T09:00:00.000Z');
+  });
+});
+
+describe('the budget counts only your share', () => {
+  it('halves shared expenses and skips what was only for the other person', async () => {
+    const [fun, transport] = await Promise.all(['Fun', 'Transport'].map(idOf));
+    await saveMonthPlan(db, { month: '2026-10', startingBalanceCents: 300000, budgets: [
+      { categoryId: transport, amountCents: 10000 },
+      { categoryId: fun, amountCents: 20000 },
+    ] });
+    // Gas, shared, paid by Sergio: 41.67 counts, 58.33 is left.
+    await addExpense(db, { categoryId: transport, amountCents: 8334, spentOn: '2026-10-02', paidBy: 'sergio', forWhom: 'shared' });
+    await addExpense(db, { categoryId: fun, amountCents: 3000, spentOn: '2026-10-03', paidBy: 'adriana', forWhom: 'shared' });
+    await addExpense(db, { categoryId: fun, amountCents: 2000, spentOn: '2026-10-04', paidBy: 'sergio', forWhom: 'sergio' });
+    await addExpense(db, { categoryId: fun, amountCents: 7000, spentOn: '2026-10-05', paidBy: 'sergio', forWhom: 'adriana' });
+
+    const byId = Object.fromEntries((await getMonthCategoryInputs(db, '2026-10')).map((c) => [c.id, c]));
+    expect(byId[transport].spentCents).toBe(4167);
+    expect(byId[transport].budgetCents - byId[transport].spentCents).toBe(5833);
+    expect(byId[fun].spentCents).toBe(3500);
+  });
+
+  it('still lists a category whose only spending was for the other person', async () => {
+    const fun = await idOf('Fun');
+    await saveMonthPlan(db, { month: '2026-10', startingBalanceCents: 1000, budgets: [], removedCategoryIds: [fun] });
+    await addExpense(db, { categoryId: fun, amountCents: 7000, spentOn: '2026-10-05', forWhom: 'adriana' });
+    expect((await getMonthCategoryInputs(db, '2026-10')).find((c) => c.id === fun)).toMatchObject({ spentCents: 0 });
+  });
+
+  it('while the budget account counts what was really paid from it', async () => {
+    const fun = await idOf('Fun');
+    await saveMonthPlan(db, { month: '2026-10', startingBalanceCents: 300000, budgets: [{ categoryId: fun, amountCents: 20000 }] });
+    await addIncome(db, { amountCents: 100000, receivedOn: '2026-10-15' });
+    await addExpense(db, { categoryId: fun, amountCents: 8334, spentOn: '2026-10-02', paidBy: 'sergio', forWhom: 'shared' });
+    await addExpense(db, { categoryId: fun, amountCents: 3000, spentOn: '2026-10-03', paidBy: 'adriana', forWhom: 'shared' });
+    await addExpense(db, { categoryId: fun, amountCents: 99900, spentOn: '2026-09-30', paidBy: 'sergio', forWhom: 'sergio' });
+    await addSettlement(db, { fromPerson: 'adriana', amountCents: 1000, settledOn: '2026-10-20' });
+    await addSettlement(db, { fromPerson: 'sergio', amountCents: 500, settledOn: '2026-10-21' });
+
+    const flows = await getBudgetAccountFlows(db, '2026-10');
+    expect(flows).toEqual({
+      startingBalanceCents: 300000,
+      incomeCents: 100000,
+      paidByOwnerCents: 8334,
+      receivedFromOtherCents: 1000,
+      paidToOtherCents: 500,
+    });
+    expect(budgetAccountCents(flows)).toBe(392166);
   });
 });

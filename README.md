@@ -89,7 +89,9 @@ category in the plan takes it out of that month only.
 Every expense records who paid and who it was for: shared 50/50, or only one of you. From that the
 app keeps a running balance across all months ("Adriana owes Sergio $40"), shown at the top of the
 Month tab. Tap it to see where the number comes from and to record a payment that settles it.
-Budgets still count the full amount of every expense, whoever paid.
+Budgets count only your share: half of a shared expense, all of one that was only for you, and
+nothing of one that was only for the other person, whoever paid. A 83.34 shared expense in a 100
+budget leaves 58.33.
 
 The math is in `src/domain/split.ts`. The two names are `PEOPLE` in `src/config.ts`.
 
@@ -104,8 +106,12 @@ The Accounts tab shows everything in one place: each account in its own currency
 are planning for but have not put in a month (counted as negative), and a total in your home
 currency. Nothing is predefined; you add, rename and delete accounts yourself.
 
-- Mark one account as the **Budget account**: its balance is not typed, it follows the current
-  balance of the month selected in the app.
+- Mark one account as the **Budget account**: its balance is not typed. It is what the selected
+  month started with, plus income, minus everything you paid (in full), plus or minus the payments
+  between the two of you.
+- Two more rows are worked out by the app: what the two of you owe each other, and
+  **Left to spend** (the month's budget not spent yet, counted as negative).
+- The total of this tab is the **Current balance** on the Month tab.
 - Other balances are typed in by hand, and so are exchange rates ("1 CAD = how many COP?").
   A currency without a rate is shown but left out of the total.
 

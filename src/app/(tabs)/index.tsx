@@ -21,13 +21,14 @@ import {
 import { Spacing } from '@/constants/theme';
 import type { CategorySummary } from '@/domain/budget';
 import { formatMonth } from '@/domain/dates';
-import { useMonthSummary } from '@/hooks/use-month-summary';
+import { useOverview } from '@/hooks/use-overview';
 import { useTheme } from '@/hooks/use-theme';
 import { useUiStore } from '@/store/ui';
 
 export default function MonthScreen() {
   const selectedMonth = useUiStore((s) => s.selectedMonth);
-  const { data, error } = useMonthSummary(selectedMonth);
+  const { data: overview, error } = useOverview(selectedMonth);
+  const data = overview?.monthView;
 
   return (
     <ThemedView style={{ flex: 1 }}>
@@ -54,7 +55,9 @@ export default function MonthScreen() {
             <BalanceCard
               startingCents={data.month.startingBalanceCents}
               incomeCents={data.summary.totalIncomeCents}
-              currentCents={data.summary.currentBalanceCents}
+              currentCents={overview?.netWorth.totalHomeCents ?? 0}
+              missingRates={overview?.netWorth.missingRates ?? []}
+              budgetAccountCents={overview?.budgetAccountCents ?? 0}
               plannedCents={data.summary.plannedEndCents}
               projectedCents={data.summary.projectedEndCents}
               status={data.summary.status}
@@ -82,7 +85,11 @@ export default function MonthScreen() {
 function BalanceCard(props: {
   startingCents: number;
   incomeCents: number;
+  /** The Accounts tab total: every account, what is owed, minus planned expenses and what is left to spend. */
   currentCents: number;
+  missingRates: string[];
+  /** Money in the account you pay from: start + income - what you paid, with payments between you two. */
+  budgetAccountCents: number;
   plannedCents: number;
   projectedCents: number;
   status: 'onTrack' | 'watch' | 'danger';
@@ -107,12 +114,20 @@ function BalanceCard(props: {
         </ThemedText>
         <StatusPill status={props.status} />
       </View>
-      <View>
+      <Pressable onPress={() => router.navigate('/accounts')}>
         <ThemedText type="small" themeColor="textSecondary">
           Current balance
         </ThemedText>
-        <Money cents={props.currentCents} type="subtitle" />
-      </View>
+        <Money
+          cents={props.currentCents}
+          type="subtitle"
+          color={props.currentCents < 0 ? theme.critical : undefined}
+        />
+        <ThemedText type="small" themeColor="textSecondary">
+          All accounts, minus planned expenses and what is left to spend
+          {props.missingRates.length > 0 ? `. Not counted: ${props.missingRates.join(', ')} (no rate)` : ''}
+        </ThemedText>
+      </Pressable>
       <View style={styles.between}>
         <Stat label="Started with" cents={props.startingCents} onPress={() => router.push('/plan')} />
         <Stat label="Planned end" cents={props.plannedCents} />
@@ -123,6 +138,7 @@ function BalanceCard(props: {
         />
       </View>
       <View style={[styles.between, styles.incomeRow, { borderTopColor: theme.separator }]}>
+        <Stat label="Budget account" cents={props.budgetAccountCents} />
         <Stat label="Income this month" cents={props.incomeCents} color={theme.good} />
         <Pressable accessibilityRole="button" hitSlop={12} onPress={() => router.push('/income')}>
           <ThemedText type="smallBold" style={{ color: theme.tint }}>
