@@ -11,7 +11,6 @@ import {
   deleteAccount,
   getAccount,
   listAccounts,
-  payCard,
   updateAccount,
 } from '@/db/repositories/accounts';
 import type { Account, AccountKind, AccountType } from '@/db/types';
@@ -99,7 +98,6 @@ function AccountForm({
     account ? centsToInputText(Math.abs(account.balanceCents)) : '',
   );
   const [isPaymentDefault, setIsPaymentDefault] = useState(account?.isPaymentDefault ?? false);
-  const [payText, setPayText] = useState('');
   const [includeInStart, setIncludeInStart] = useState(account?.includeInStart ?? true);
   const [isIncomeDefault, setIsIncomeDefault] = useState(account?.isIncomeDefault ?? false);
 
@@ -111,7 +109,6 @@ function AccountForm({
   const linked = isCard ? banks.find((b) => b.id === linkedAccountId) : undefined;
   const canSave =
     name.trim() !== '' && currency !== null && balanceCents !== null && (!isCard || linked !== undefined);
-  const payCents = parseAmountToCents(payText);
 
   async function save() {
     if (!canSave) return;
@@ -148,16 +145,6 @@ function AccountForm({
     });
   }
 
-  async function pay() {
-    if (!account || payCents === null || payCents <= 0) return;
-    try {
-      await payCard(db, account.id, payCents);
-      router.back();
-    } catch (e) {
-      Alert.alert('Could not save', e instanceof Error ? e.message : String(e));
-    }
-  }
-
   const noun = isPlanned
     ? 'planned expense'
     : isCard
@@ -178,6 +165,14 @@ function AccountForm({
                 : 'Bank account',
         }}
       />
+      {/* Paying the card has its own screen; this is the way in from the card itself. */}
+      {account && account.linkedAccountId ? (
+        <Button
+          title={`Pay this card (you owe ${centsToInputText(Math.abs(account.balanceCents))})`}
+          onPress={() => router.push({ pathname: '/pay-card', params: { id: account.id } })}
+        />
+      ) : null}
+
       <Field
         label="Name"
         value={name}
@@ -302,29 +297,6 @@ function AccountForm({
           {paymentDefaultName} is the default payment method. To change it, switch it off there first.
         </ThemedText>
       )}
-
-      {account && account.linkedAccountId && linked ? (
-        <View style={{ gap: 8 }}>
-          <SectionLabel>Pay this card</SectionLabel>
-          <Field
-            label={`Amount paid from ${linked.name}`}
-            value={payText}
-            onChangeText={setPayText}
-            keyboardType="decimal-pad"
-            placeholder={centsToInputText(Math.abs(account.balanceCents))}
-          />
-          <ThemedText type="small" themeColor="textSecondary">
-            Takes the amount out of {linked.name} and off what you owe on the card. It is not an
-            expense.
-          </ThemedText>
-          <Button
-            title="Record card payment"
-            variant="secondary"
-            onPress={pay}
-            disabled={payCents === null || payCents <= 0}
-          />
-        </View>
-      ) : null}
 
       <View style={{ gap: 8, marginTop: 8 }}>
         <Button title={account ? 'Save changes' : `Add ${noun}`} onPress={save} disabled={!canSave} />

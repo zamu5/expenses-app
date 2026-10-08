@@ -43,13 +43,14 @@ function PayCardForm({
 }) {
   const db = useSQLiteContext();
   const [cardId, setCardId] = useState(cards.find((c) => c.id === initialCardId)?.id ?? cards[0].id);
-  // Empty means "everything that is owed", which is the usual payment.
-  const [text, setText] = useState('');
+  // Starts on everything that is owed, which is the usual payment. Typing replaces it.
+  const [typed, setTyped] = useState<string | null>(null);
 
   const card = cards.find((c) => c.id === cardId) ?? cards[0];
   const bank = accounts.find((a) => a.id === card.linkedAccountId);
   const owedCents = Math.max(0, -card.balanceCents);
-  const amountCents = text.trim() === '' ? owedCents : parseAmountToCents(text);
+  const text = typed ?? (owedCents > 0 ? centsToInputText(owedCents) : '');
+  const amountCents = parseAmountToCents(text);
   const canPay = amountCents !== null && amountCents > 0 && bank !== undefined;
 
   async function pay() {
@@ -67,7 +68,15 @@ function PayCardForm({
       {cards.length > 1 ? (
         <>
           <SectionLabel>Card</SectionLabel>
-          <Chips options={cards.map((c) => ({ value: c.id, label: c.name }))} value={cardId} onChange={setCardId} />
+          <Chips
+            options={cards.map((c) => ({ value: c.id, label: c.name }))}
+            value={cardId}
+            onChange={(next) => {
+              setCardId(next);
+              // Back to the full amount owed on the newly chosen card.
+              setTyped(null);
+            }}
+          />
         </>
       ) : null}
 
@@ -79,13 +88,14 @@ function PayCardForm({
       <Field
         label="Amount to pay"
         value={text}
-        onChangeText={setText}
+        onChangeText={setTyped}
         keyboardType="decimal-pad"
-        placeholder={centsToInputText(owedCents)}
+        placeholder="0.00"
       />
       <ThemedText type="small" themeColor="textSecondary">
-        Leave it empty to pay everything you owe. The money comes out of {bank?.name ?? 'the linked account'}
-        {' '}and off the card. It is not an expense, so no budget changes.
+        It starts on everything you owe; change it to pay only part. The money comes out of{' '}
+        {bank?.name ?? 'the linked account'} and off the card. It is not an expense, so no budget
+        changes.
       </ThemedText>
 
       <Button
