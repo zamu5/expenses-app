@@ -145,3 +145,24 @@ export function computeMonthSummary(input: MonthInput): MonthSummary {
 export function leftToSpendCents(categories: Pick<CategoryInput, 'budgetCents' | 'spentCents'>[]): Cents {
   return categories.reduce((total, c) => total + Math.max(0, c.budgetCents - c.spentCents), 0);
 }
+
+/**
+ * Why a month has the status it has, in words for the legend on the Month tab.
+ * Mirrors the rule in computeMonthSummary(): below zero is danger, a category over budget is watch.
+ * `format` turns cents into text, so this stays free of currency and locale.
+ */
+export function explainMonthStatus(
+  summary: Pick<MonthSummary, 'status' | 'categories' | 'plannedEndCents'>,
+  format: (cents: Cents) => string,
+): string {
+  if (summary.status === 'danger') {
+    return `Danger: the planned end is below zero by ${format(-summary.plannedEndCents)}. Your budgets add up to more than what you start with plus your income.`;
+  }
+  if (summary.status === 'watch') {
+    const over = summary.categories
+      .filter((c) => c.status === 'over')
+      .map((c) => `${c.name} (by ${format(-c.remainingCents)})`);
+    return `Watch: over budget in ${over.join(', ')}.`;
+  }
+  return 'On track: the planned end is above zero and no category is over its budget.';
+}

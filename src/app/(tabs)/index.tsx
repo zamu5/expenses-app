@@ -1,4 +1,5 @@
 import { router } from 'expo-router';
+import { useState } from 'react';
 import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import { IncomeList } from '@/components/income-list';
@@ -20,8 +21,10 @@ import {
 } from '@/components/ui';
 import { Spacing } from '@/constants/theme';
 import { listIncomes } from '@/db/repositories/incomes';
-import type { CategorySummary } from '@/domain/budget';
+import { CURRENCY } from '@/config';
+import { explainMonthStatus, type CategorySummary } from '@/domain/budget';
 import { formatMonth } from '@/domain/dates';
+import { formatCents } from '@/domain/money';
 import { useDbQuery } from '@/hooks/use-db-query';
 import { useOverview } from '@/hooks/use-overview';
 import { useTheme } from '@/hooks/use-theme';
@@ -64,6 +67,7 @@ export default function MonthScreen() {
               missingRates={overview?.netWorth.missingRates ?? []}
               plannedCents={data.summary.plannedEndCents}
               status={data.summary.status}
+              statusReason={explainMonthStatus(data.summary, (cents) => formatCents(cents, CURRENCY))}
               daysElapsed={data.daysElapsed}
               daysInMonth={data.daysInMonth}
             />
@@ -98,10 +102,13 @@ function BalanceCard(props: {
   /** Money in the account you pay from: start + income - what you paid, with payments between you two. */
   plannedCents: number;
   status: 'onTrack' | 'watch' | 'danger';
+  /** Shown as a legend while the pointer is over the status (or a finger is held on it). */
+  statusReason: string;
   daysElapsed: number;
   daysInMonth: number;
 }) {
   const theme = useTheme();
+  const [legendOpen, setLegendOpen] = useState(false);
   const dayLabel =
     props.daysElapsed === 0
       ? 'Not started yet'
@@ -115,7 +122,21 @@ function BalanceCard(props: {
         <ThemedText type="small" themeColor="textSecondary">
           {dayLabel}
         </ThemedText>
-        <StatusPill status={props.status} />
+        <Pressable
+          accessibilityHint={props.statusReason}
+          onHoverIn={() => setLegendOpen(true)}
+          onHoverOut={() => setLegendOpen(false)}
+          onPressIn={() => setLegendOpen(true)}
+          onPressOut={() => setLegendOpen(false)}>
+          <StatusPill status={props.status} />
+        </Pressable>
+        {legendOpen ? (
+          <View
+            pointerEvents="none"
+            style={[styles.legend, { backgroundColor: theme.backgroundSelected, borderColor: theme.separator }]}>
+            <ThemedText type="small">{props.statusReason}</ThemedText>
+          </View>
+        ) : null}
       </View>
       <Pressable onPress={() => router.navigate('/accounts')}>
         <ThemedText type="small" themeColor="textSecondary">
@@ -213,6 +234,17 @@ function CategoryTile({ category: c, width }: { category: CategorySummary; width
 }
 
 const styles = StyleSheet.create({
+  // Floats under the status label, over the rest of the card.
+  legend: {
+    position: 'absolute',
+    top: 30,
+    right: 0,
+    zIndex: 1,
+    maxWidth: 260,
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: Spacing.two,
+  },
   grid: { flexDirection: 'row', flexWrap: 'wrap' },
   tile: { borderRadius: 12, padding: Spacing.two, justifyContent: 'space-between', gap: Spacing.one },
   tileName: { fontSize: 12, lineHeight: 15, fontWeight: 600 },
