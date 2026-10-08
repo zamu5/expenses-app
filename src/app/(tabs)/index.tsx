@@ -82,7 +82,7 @@ export default function MonthScreen() {
             <SectionLabel>Categories</SectionLabel>
             <View style={[styles.grid, { gap: TILE_GAP }]}>
               {sortPaidLast(data.summary.categories).map((c) => (
-                <CategoryTile key={c.id} category={c} width={tileWidth} />
+                <CategoryTile key={c.id} category={c} width={tileWidth} compact={tileWidth < 150} />
               ))}
             </View>
 
@@ -207,7 +207,16 @@ const formatPlain = (cents: number) =>
  * One category as a small box. First line: its name, and on the right what is left of its
  * budget. Then what was spent of how much, and a bar.
  */
-function CategoryTile({ category: c, width }: { category: CategorySummary; width: number }) {
+function CategoryTile({
+  category: c,
+  width,
+  compact,
+}: {
+  category: CategorySummary;
+  width: number;
+  /** The tile is too narrow (a phone) for the budget next to the spending. */
+  compact: boolean;
+}) {
   const theme = useTheme();
   const color = useStatusColor(c.status);
   const ratio = c.budgetCents > 0 ? c.spentCents / c.budgetCents : c.spentCents > 0 ? 1 : 0;
@@ -247,7 +256,7 @@ function CategoryTile({ category: c, width }: { category: CategorySummary; width
         </View>
       </View>
       <View>
-        {/* What was spent on the left, how much of the budget that is on the right. */}
+        {/* "x spent of y" on one line, the percentage on the right. A phone only has room for "x spent". */}
         <View style={styles.tileSpentRow}>
           <ThemedText
             type="small"
@@ -256,26 +265,16 @@ function CategoryTile({ category: c, width }: { category: CategorySummary; width
             adjustsFontSizeToFit
             style={[styles.tileCaption, styles.tileSpent]}>
             {formatPlain(c.spentCents)} spent
+            {compact ? '' : ` of ${formatPlain(c.budgetCents)}`}
           </ThemedText>
           <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.tileCaption}>
             {Math.round(ratio * 100)}%
           </ThemedText>
         </View>
-        <View style={styles.tileSpentRow}>
-          <ThemedText
-            type="small"
-            themeColor="textSecondary"
-            numberOfLines={1}
-            adjustsFontSizeToFit
-            style={[styles.tileCaption, styles.tileSpent]}>
-            of {formatPlain(c.budgetCents)}
-          </ThemedText>
-          {c.isFixed ? (
-            <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.tileCaption}>
-              fixed
-            </ThemedText>
-          ) : null}
-        </View>
+        {/* Always takes its line, so fixed and other tiles are the same height. */}
+        <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={[styles.tileCaption, { textAlign: 'right' }]}>
+          {c.isFixed ? 'fixed' : ' '}
+        </ThemedText>
       </View>
       <ProgressBar ratio={ratio} color={color} />
     </Pressable>
