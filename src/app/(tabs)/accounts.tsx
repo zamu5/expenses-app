@@ -90,6 +90,9 @@ export default function AccountsScreen() {
           onPress={() => router.push('/balance')}
         />
       </Card>
+      {accounts.some((a) => a.linkedAccountId !== null) ? (
+        <Button title="Pay credit card" variant="secondary" onPress={() => router.push('/pay-card')} />
+      ) : null}
       <Button title="Add account" onPress={() => router.push('/account-edit')} />
 
       <SectionLabel>Planned expenses</SectionLabel>
