@@ -41,7 +41,9 @@ export default function ExpenseScreen() {
       categories: await listCategories(db, { includeArchived: true }),
       expense: id ? await getExpense(db, id) : null,
       // What an expense can be paid with: bank accounts and credit cards in the home currency.
-      methods: (await listAccounts(db)).filter((a) => a.kind === 'account' && a.currency === CURRENCY),
+      methods: (await listAccounts(db)).filter(
+        (a) => a.kind === 'account' && a.accountType === 'bank' && a.currency === CURRENCY,
+      ),
     }),
     [id],
   );

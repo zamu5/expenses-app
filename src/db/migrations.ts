@@ -192,6 +192,14 @@ const migrations: ((db: Db) => Promise<void>)[] = [
       ALTER TABLE expenses ADD COLUMN payment_account_id TEXT REFERENCES accounts(id);
     `);
   },
+
+  // Version 10: bank accounts and investment accounts are told apart.
+  async (db) => {
+    await db.execAsync(`
+      ALTER TABLE accounts ADD COLUMN account_type TEXT NOT NULL DEFAULT 'bank'
+        CHECK (account_type IN ('bank', 'investment'));
+    `);
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = migrations.length;

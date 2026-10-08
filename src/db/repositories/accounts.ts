@@ -2,12 +2,13 @@ import { BUDGET_OWNER } from '@/domain/split';
 import { newId, nowISO } from '@/lib/id';
 
 import { notifyDataChanged } from '../events';
-import type { Account, AccountKind, Db, ExchangeRate } from '../types';
+import type { Account, AccountKind, AccountType, Db, ExchangeRate } from '../types';
 
 interface AccountRow {
   id: string;
   name: string;
   kind: AccountKind;
+  account_type: AccountType;
   currency: string;
   balance_cents: number;
   include_in_start: number;
@@ -21,6 +22,7 @@ const toAccount = (r: AccountRow): Account => ({
   id: r.id,
   name: r.name,
   kind: r.kind,
+  accountType: r.account_type,
   currency: r.currency,
   balanceCents: r.balance_cents,
   includeInStart: r.include_in_start === 1,
@@ -31,7 +33,7 @@ const toAccount = (r: AccountRow): Account => ({
 });
 
 const COLUMNS =
-  'id, name, kind, currency, balance_cents, include_in_start, is_income_default, linked_account_id, is_payment_default, balance_updated_on';
+  'id, name, kind, account_type, currency, balance_cents, include_in_start, is_income_default, linked_account_id, is_payment_default, balance_updated_on';
 
 /** Accounts first, then planned expenses, each in the order they were added. */
 export async function listAccounts(db: Db): Promise<Account[]> {
@@ -54,6 +56,8 @@ export async function getAccount(db: Db, id: string): Promise<Account | null> {
 export interface AccountInput {
   name: string;
   kind: AccountKind;
+  /** Defaults to 'bank'. An investment account cannot be a credit card or a payment method. */
+  accountType?: AccountType;
   currency: string;
   balanceCents: number;
   /** Defaults to true. */
@@ -66,6 +70,20 @@ export interface AccountInput {
   isPaymentDefault?: boolean;
   /** Day the balance was typed, 'YYYY-MM-DD'. */
   balanceUpdatedOn: string;
+}
+
+/** Applies the rules between the options: only a bank account can be a card or pay for things. */
+function normalize(input: AccountInput) {
+  const isAccount = input.kind === 'account';
+  const accountType: AccountType = isAccount ? (input.accountType ?? 'bank') : 'bank';
+  const isBank = isAccount && accountType === 'bank';
+  const linkedAccountId = isBank ? (input.linkedAccountId ?? null) : null;
+  return {
+    accountType,
+    linkedAccountId,
+    isIncomeDefault: isAccount && linkedAccountId === null && input.isIncomeDefault === true,
+    isPaymentDefault: isBank && input.isPaymentDefault === true,
+  };
 }
 
 /** Only one account holds each default, so marking one unmarks the others. */
@@ -84,10 +102,7 @@ async function keepOneDefault(
 export async function createAccount(db: Db, input: AccountInput): Promise<string> {
   const id = newId();
   const now = nowISO();
-  const isAccount = input.kind === 'account';
-  const linkedAccountId = isAccount ? (input.linkedAccountId ?? null) : null;
-  const isIncomeDefault = isAccount && linkedAccountId === null && input.isIncomeDefault === true;
-  const isPaymentDefault = isAccount && input.isPaymentDefault === true;
+  const { accountType, linkedAccountId, isIncomeDefault, isPaymentDefault } = normalize(input);
   await db.withTransactionAsync(async () => {
     const firstCard =
       linkedAccountId !== null &&
@@ -97,13 +112,14 @@ export async function createAccount(db: Db, input: AccountInput): Promise<string
       )) === null;
     await db.runAsync(
       `INSERT INTO accounts
-         (id, name, kind, currency, balance_cents, include_in_start, is_income_default,
+         (id, name, kind, account_type, currency, balance_cents, include_in_start, is_income_default,
           linked_account_id, is_payment_default, balance_updated_on, sort_order, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), -1) + 1 FROM accounts), ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), -1) + 1 FROM accounts), ?, ?)`,
       [
         id,
         input.name.trim(),
         input.kind,
+        accountType,
         input.currency,
         input.balanceCents,
         (input.includeInStart ?? true) ? 1 : 0,
@@ -132,18 +148,16 @@ export async function createAccount(db: Db, input: AccountInput): Promise<string
 
 export async function updateAccount(db: Db, id: string, input: AccountInput): Promise<void> {
   const now = nowISO();
-  const isAccount = input.kind === 'account';
-  const linkedAccountId = isAccount ? (input.linkedAccountId ?? null) : null;
-  const isIncomeDefault = isAccount && linkedAccountId === null && input.isIncomeDefault === true;
-  const isPaymentDefault = isAccount && input.isPaymentDefault === true;
+  const { accountType, linkedAccountId, isIncomeDefault, isPaymentDefault } = normalize(input);
   await db.withTransactionAsync(async () => {
     await db.runAsync(
-      `UPDATE accounts SET name = ?, currency = ?, balance_cents = ?, include_in_start = ?,
-         is_income_default = ?, linked_account_id = ?, is_payment_default = ?,
+      `UPDATE accounts SET name = ?, account_type = ?, currency = ?, balance_cents = ?,
+         include_in_start = ?, is_income_default = ?, linked_account_id = ?, is_payment_default = ?,
          balance_updated_on = ?, updated_at = ?
        WHERE id = ?`,
       [
         input.name.trim(),
+        accountType,
         input.currency,
         input.balanceCents,
         (input.includeInStart ?? true) ? 1 : 0,

@@ -14,7 +14,7 @@ import {
   payCard,
   updateAccount,
 } from '@/db/repositories/accounts';
-import type { Account, AccountKind } from '@/db/types';
+import type { Account, AccountKind, AccountType } from '@/db/types';
 import { parseCurrencyCode } from '@/domain/accounts';
 import { todayISO } from '@/domain/dates';
 import { centsToInputText, parseAmountToCents } from '@/domain/money';
@@ -40,7 +40,12 @@ export default function AccountEditScreen() {
         paymentDefaultName: paymentDefault?.name ?? null,
         // A credit card is paid from a bank account in the home currency (not from another card).
         banks: all.filter(
-          (a) => a.kind === 'account' && a.linkedAccountId === null && a.currency === CURRENCY && a.id !== id,
+          (a) =>
+            a.kind === 'account' &&
+            a.accountType === 'bank' &&
+            a.linkedAccountId === null &&
+            a.currency === CURRENCY &&
+            a.id !== id,
         ),
       };
     },
@@ -86,7 +91,10 @@ function AccountForm({
   // A credit card is an account linked to the bank account it is paid from. What is owed on it
   // is typed as a positive amount and stored as a negative balance.
   const [linkedAccountId, setLinkedAccountId] = useState<string | null>(account?.linkedAccountId ?? null);
-  const [isCard, setIsCard] = useState(account ? account.linkedAccountId !== null : false);
+  const [isCardOn, setIsCardOn] = useState(account ? account.linkedAccountId !== null : false);
+  const [accountType, setAccountType] = useState<AccountType>(account?.accountType ?? 'bank');
+  // Only a bank account can be a credit card.
+  const isCard = isCardOn && accountType === 'bank';
   const [balanceText, setBalanceText] = useState(
     account ? centsToInputText(Math.abs(account.balanceCents)) : '',
   );
@@ -110,13 +118,15 @@ function AccountForm({
     const input = {
       name,
       kind,
+      accountType,
       currency,
       balanceCents,
       includeInStart,
       // Never claim the default while another account holds it.
       isIncomeDefault: incomeDefaultName === null && currency === CURRENCY && !isCard && isIncomeDefault,
       linkedAccountId: isCard ? linkedAccountId : null,
-      isPaymentDefault: paymentDefaultName === null && currency === CURRENCY && isPaymentDefault,
+      isPaymentDefault:
+        paymentDefaultName === null && accountType === 'bank' && currency === CURRENCY && isPaymentDefault,
       // Keep the "updated" day unless the balance itself changed.
       balanceUpdatedOn:
         account && account.balanceCents === balanceCents ? account.balanceUpdatedOn : todayISO(),
@@ -148,10 +158,26 @@ function AccountForm({
     }
   }
 
-  const noun = isPlanned ? 'planned expense' : isCard ? 'credit card' : 'account';
+  const noun = isPlanned
+    ? 'planned expense'
+    : isCard
+      ? 'credit card'
+      : accountType === 'investment'
+        ? 'investment account'
+        : 'bank account';
   return (
     <Screen>
-      <Stack.Screen options={{ title: isPlanned ? 'Planned expense' : isCard ? 'Credit card' : 'Account' }} />
+      <Stack.Screen
+        options={{
+          title: isPlanned
+            ? 'Planned expense'
+            : isCard
+              ? 'Credit card'
+              : accountType === 'investment'
+                ? 'Investment account'
+                : 'Bank account',
+        }}
+      />
       <Field
         label="Name"
         value={name}
@@ -160,14 +186,27 @@ function AccountForm({
         autoFocus={!account}
       />
 
-      {/* A card needs a bank account in the home currency to be paid from. */}
-      {!isPlanned && (isCard || banks.length > 0) ? (
+      {!isPlanned ? (
+        <>
+          <SectionLabel>Type</SectionLabel>
+          <Chips<AccountType>
+            options={[
+              { value: 'bank', label: 'Bank account' },
+              { value: 'investment', label: 'Investment account' },
+            ]}
+            value={accountType}
+            onChange={setAccountType}
+          />
+        </>
+      ) : null}
+      {/* Only a bank account can be a credit card. */}
+      {!isPlanned && accountType === 'bank' ? (
         <ToggleRow
           label="This is a credit card"
           hint="What you spend with it is owed, and it is paid from one of your bank accounts."
           value={isCard}
           onValueChange={(value) => {
-            setIsCard(value);
+            setIsCardOn(value);
             if (value) setCurrencyText(CURRENCY);
           }}
         />
@@ -182,7 +221,9 @@ function AccountForm({
           />
           {linked === undefined ? (
             <ThemedText type="small" style={{ color: theme.critical }}>
-              Pick the bank account this card is paid from.
+              {banks.length === 0
+                ? `Add a bank account in ${CURRENCY} first, so this card has an account to be paid from.`
+                : 'Pick the bank account this card is paid from.'}
             </ThemedText>
           ) : null}
         </>
@@ -248,7 +289,8 @@ function AccountForm({
         </ThemedText>
       )}
 
-      {isPlanned || currency !== CURRENCY ? null : paymentDefaultName === null ? (
+      {/* Only a bank account or a card pays for things. */}
+      {isPlanned || accountType !== 'bank' || currency !== CURRENCY ? null : paymentDefaultName === null ? (
         <ToggleRow
           label="Default payment method"
           hint={'Pre-selected as "Paid with" when you log an expense. Only one can be the default.'}

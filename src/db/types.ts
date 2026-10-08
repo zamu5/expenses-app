@@ -63,6 +63,8 @@ export interface Income {
 }
 
 export type AccountKind = 'account' | 'planned';
+/** A bank account is money you pay with; an investment account is money put aside. */
+export type AccountType = 'bank' | 'investment';
 
 /**
  * Somewhere money is (kind 'account'), or an expense you expect but have not tied to a month
@@ -72,6 +74,8 @@ export interface Account {
   id: string;
   name: string;
   kind: AccountKind;
+  /** Only meaningful for kind 'account'. Credit cards are bank accounts with a linked account. */
+  accountType: AccountType;
   /** ISO 4217 code, e.g. 'CAD' or 'COP'. */
   currency: string;
   balanceCents: number;

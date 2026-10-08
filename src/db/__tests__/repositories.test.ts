@@ -801,3 +801,40 @@ describe('credit cards and what an expense was paid with', () => {
     expect((await listExpenses(db, '2026-10'))[0].paymentAccountId).toBe(visa);
   });
 });
+
+describe('bank and investment accounts', () => {
+  const make = (name: string, extra = {}) =>
+    createAccount(db, { name, kind: 'account', currency: 'CAD', balanceCents: 100, balanceUpdatedOn: '2026-10-01', ...extra });
+  const named = async (name: string) => (await listAccounts(db)).find((a) => a.name === name)!;
+
+  it('is a bank account unless said otherwise, and can be changed', async () => {
+    const id = await make('Savings');
+    expect((await named('Savings')).accountType).toBe('bank');
+    await updateAccount(db, id, { name: 'Savings', kind: 'account', accountType: 'investment', currency: 'CAD', balanceCents: 100, balanceUpdatedOn: '2026-10-01' });
+    expect((await named('Savings')).accountType).toBe('investment');
+  });
+
+  it('an investment account cannot be a credit card or the default payment method', async () => {
+    const bank = await make('Chequing');
+    await make('Broker', { accountType: 'investment', linkedAccountId: bank, isPaymentDefault: true, isIncomeDefault: true });
+    expect(await named('Broker')).toMatchObject({
+      accountType: 'investment',
+      linkedAccountId: null,
+      isPaymentDefault: false,
+      // Income can still be paid into it.
+      isIncomeDefault: true,
+    });
+  });
+
+  it('accounts from before the upgrade become bank accounts', async () => {
+    db = createTestDb();
+    await migrate(db, 9);
+    await db.runAsync(
+      `INSERT INTO accounts (id, name, kind, currency, balance_cents, balance_updated_on, created_at, updated_at)
+       VALUES ('a1', 'Old', 'account', 'CAD', 5, '2026-10-01', 'x', 'x')`,
+      [],
+    );
+    await migrate(db);
+    expect((await named('Old')).accountType).toBe('bank');
+  });
+});
