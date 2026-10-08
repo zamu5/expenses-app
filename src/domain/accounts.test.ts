@@ -105,6 +105,18 @@ describe('computeStartedWith', () => {
     expect(computeStartedWith(switchedOff, 214498, { COP: 2950 }, 'CAD').totalHomeCents).toBe(114498);
   });
 
+  it('ignores the typed start when no account is the budget account, so it is not counted twice', () => {
+    // The main account is a normal account holding 2,144.98; the plan also says 2,144.98.
+    const allNormal = accounts.map((a) => ({ ...a, isBudgetAccount: false, balanceCents: a.isBudgetAccount ? 214498 : a.balanceCents }));
+    // 2,144.98 + 10,000 + 1,000 + 1,000 - 3,000, the same as with a marked budget account
+    expect(computeStartedWith(allNormal, 214498, { COP: 2950 }, 'CAD').totalHomeCents).toBe(1114498);
+  });
+
+  it('uses the typed start with only planned expenses and no accounts', () => {
+    const onlyPlanned = accounts.filter((a) => a.kind === 'planned');
+    expect(computeStartedWith(onlyPlanned, 214498, {}, 'CAD').totalHomeCents).toBe(-85502);
+  });
+
   it('is just the month start when there are no other accounts', () => {
     expect(computeStartedWith([], 214498, {}, 'CAD').totalHomeCents).toBe(214498);
   });

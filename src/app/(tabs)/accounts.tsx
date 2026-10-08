@@ -85,19 +85,10 @@ export default function AccountsScreen() {
         }
       />
       <Card style={{ gap: 0, paddingVertical: 4 }}>
-        {data.hasBudgetAccount ? null : (
-          <ComputedRow
-            name="Monthly budget"
-            hint={`${monthName} · mark an account as "Budget account" to name it`}
-            cents={data.budgetAccountCents}
-            onPress={() => router.push('/account-edit')}
-          />
-        )}
         <ComputedRow
           name={owed ? `${PEOPLE[owed.debtor]} owes ${PEOPLE[owed.creditor]}` : `${PEOPLE.adriana} and ${PEOPLE.sergio}`}
           hint={owed ? 'From shared expenses, all months · tap to settle up' : 'All square'}
           cents={data.owedCents}
-          separator={!data.hasBudgetAccount}
           onPress={() => router.push('/balance')}
         />
       </Card>

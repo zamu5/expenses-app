@@ -41,8 +41,8 @@ export interface Overview {
 
 /**
  * Everything the Accounts tab shows, and the single total the Month tab calls "Current balance".
- * Three rows are worked out by the app instead of typed: the budget account, what the two people
- * owe each other, and what is left to spend this month.
+ * Three rows are worked out by the app instead of typed: the budget account (when one is marked),
+ * what the two people owe each other, and what is left to spend this month.
  */
 export async function loadOverview(db: Db, monthKey: MonthKey): Promise<Overview> {
   const [saved, rates, monthView, flows, splitTotals] = await Promise.all([
@@ -63,8 +63,6 @@ export async function loadOverview(db: Db, monthKey: MonthKey): Promise<Overview
 
   const items: NetWorthItem[] = [
     ...accounts,
-    // Without a marked budget account, the month's money still belongs in the total.
-    ...(hasBudgetAccount ? [] : [{ kind: 'account' as const, currency: CURRENCY, balanceCents: budgetCents }]),
     { kind: 'account', currency: CURRENCY, balanceCents: owedCents },
     { kind: 'planned', currency: CURRENCY, balanceCents: leftCents },
   ];

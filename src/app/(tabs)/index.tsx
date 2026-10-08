@@ -57,7 +57,7 @@ export default function MonthScreen() {
               incomeCents={data.summary.totalIncomeCents}
               currentCents={overview?.netWorth.totalHomeCents ?? 0}
               missingRates={overview?.netWorth.missingRates ?? []}
-              budgetAccountCents={overview?.budgetAccountCents ?? 0}
+              budgetAccountCents={overview?.hasBudgetAccount ? overview.budgetAccountCents : null}
               // The summary's ends are for the budget account alone; shift them to cover all accounts.
               plannedCents={
                 data.summary.plannedEndCents +
@@ -99,7 +99,8 @@ function BalanceCard(props: {
   currentCents: number;
   missingRates: string[];
   /** Money in the account you pay from: start + income - what you paid, with payments between you two. */
-  budgetAccountCents: number;
+  /** Null when no account is marked as the budget account. */
+  budgetAccountCents: number | null;
   plannedCents: number;
   projectedCents: number;
   status: 'onTrack' | 'watch' | 'danger';
@@ -148,7 +149,9 @@ function BalanceCard(props: {
         />
       </View>
       <View style={[styles.between, styles.incomeRow, { borderTopColor: theme.separator }]}>
-        <Stat label="Budget account" cents={props.budgetAccountCents} />
+        {props.budgetAccountCents !== null ? (
+          <Stat label="Budget account" cents={props.budgetAccountCents} />
+        ) : null}
         <Stat label="Income this month" cents={props.incomeCents} color={theme.good} />
         <Pressable accessibilityRole="button" hitSlop={12} onPress={() => router.push('/income')}>
           <ThemedText type="smallBold" style={{ color: theme.tint }}>
