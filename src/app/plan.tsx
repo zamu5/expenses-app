@@ -84,6 +84,14 @@ function PlanForm({
   );
 
   const [includedIds, setIncludedIds] = useState(inMonthIds);
+  // A category made in "Manage categories" while this form is open arrives as a new id in
+  // `inMonthIds`. Put it in the plan once, without undoing removals made here.
+  const [seenIds, setSeenIds] = useState(inMonthIds);
+  const arrived = inMonthIds.filter((id) => !seenIds.includes(id));
+  if (arrived.length > 0) {
+    setSeenIds([...seenIds, ...arrived]);
+    setIncludedIds((prev) => [...prev, ...arrived.filter((id) => !prev.includes(id))]);
+  }
   const [newName, setNewName] = useState('');
   const [newIsMonthly, setNewIsMonthly] = useState(false);
 
@@ -246,6 +254,10 @@ function PlanForm({
       </Card>
 
       <Button title="Save plan" onPress={save} disabled={invalid} />
+      <Button title="Manage categories" variant="secondary" onPress={() => router.push('/categories')} />
+      <ThemedText type="small" themeColor="textSecondary" style={{ textAlign: 'center' }}>
+        Rename or archive a category, or change whether it is fixed or in every month.
+      </ThemedText>
     </Screen>
   );
 }

@@ -2,20 +2,20 @@ import { router } from 'expo-router';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { Button, Card, Screen, SectionLabel, Title } from '@/components/ui';
+import { Button, Card, Screen, SectionLabel } from '@/components/ui';
 import { listCategories } from '@/db/repositories/categories';
 import type { Category } from '@/db/types';
 import { useDbQuery } from '@/hooks/use-db-query';
 import { useTheme } from '@/hooks/use-theme';
 
+/** Every category, to rename, archive or add one. Opened from the month's plan. */
 export default function CategoriesScreen() {
   const { data: categories } = useDbQuery((db) => listCategories(db, { includeArchived: true }), []);
   const active = categories?.filter((c) => !c.archivedAt) ?? [];
   const archived = categories?.filter((c) => c.archivedAt) ?? [];
 
   return (
-    <Screen tabs>
-      <Title>Categories</Title>
+    <Screen>
       <ThemedText type="small" themeColor="textSecondary">
         Fixed costs are paid once a month (rent, subscriptions). Variable costs are spread over the
         month, so the app tracks how fast you spend them. Categories that are not monthly only show

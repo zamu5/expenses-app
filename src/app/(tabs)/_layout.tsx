@@ -18,10 +18,6 @@ export default function TabsLayout() {
         <NativeTabs.Trigger.Label>Expenses</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="list.bullet" />
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="categories">
-        <NativeTabs.Trigger.Label>Categories</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf={{ default: 'square.grid.2x2', selected: 'square.grid.2x2.fill' }} />
-      </NativeTabs.Trigger>
     </NativeTabs>
   );
 }
