@@ -28,7 +28,8 @@ docker compose up --build     # start; add -d to run it in the background
 docker compose down           # stop
 ```
 
-Then open http://localhost:8081 in a browser for the web version.
+Then open http://localhost:8082 in a browser for the web version. The container uses port 8082 so
+it can stay up while `npx expo start` runs on the Mac on its usual port, 8081.
 
 To open it from a phone on the same Wi-Fi, start it with this machine's LAN IP so the QR code
 points at it:

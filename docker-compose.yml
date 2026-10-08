@@ -2,7 +2,7 @@ services:
   app:
     build: .
     ports:
-      - "8081:8081"
+      - "8082:8082"
     environment:
       # Set to this machine's LAN IP to open the app from a phone (see README).
       REACT_NATIVE_PACKAGER_HOSTNAME: ${REACT_NATIVE_PACKAGER_HOSTNAME:-localhost}
