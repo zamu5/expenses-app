@@ -22,7 +22,12 @@ import {
 import { Spacing } from '@/constants/theme';
 import { listIncomes } from '@/db/repositories/incomes';
 import { CURRENCY } from '@/config';
-import { explainMonthStatus, type CategorySummary } from '@/domain/budget';
+import {
+  explainMonthStatus,
+  isPaidInFull,
+  sortPaidLast,
+  type CategorySummary,
+} from '@/domain/budget';
 import { formatMonth } from '@/domain/dates';
 import { formatCents } from '@/domain/money';
 import { useDbQuery } from '@/hooks/use-db-query';
@@ -76,7 +81,7 @@ export default function MonthScreen() {
 
             <SectionLabel>Categories</SectionLabel>
             <View style={[styles.grid, { gap: TILE_GAP }]}>
-              {data.summary.categories.map((c) => (
+              {sortPaidLast(data.summary.categories).map((c) => (
                 <CategoryTile key={c.id} category={c} width={tileWidth} />
               ))}
             </View>
@@ -204,15 +209,17 @@ function CategoryTile({ category: c, width }: { category: CategorySummary; width
   const color = useStatusColor(c.status);
   const ratio = c.budgetCents > 0 ? c.spentCents / c.budgetCents : c.spentCents > 0 ? 1 : 0;
   const isOver = c.remainingCents < 0;
+  // A fixed cost paid exactly: done for the month, so it is dimmed and says so.
+  const isDone = isPaidInFull(c) && !isOver;
 
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${c.name}: ${formatPlain(c.remainingCents)} ${isOver ? 'over' : 'left'}, ${formatPlain(c.spentCents)} spent of ${formatPlain(c.budgetCents)}`}
+      accessibilityLabel={`${c.name}: ${isDone ? 'paid, ' : ''}${formatPlain(c.remainingCents)} ${isOver ? 'over' : 'left'}, ${formatPlain(c.spentCents)} spent of ${formatPlain(c.budgetCents)}`}
       onPress={() => router.push({ pathname: '/category/[id]', params: { id: c.id } })}
       style={({ pressed }) => [
         styles.tile,
-        { width, backgroundColor: theme.backgroundElement, opacity: pressed ? 0.7 : 1 },
+        { width, backgroundColor: theme.backgroundElement, opacity: pressed ? 0.7 : isDone ? 0.55 : 1 },
       ]}>
       <ThemedText type="small" numberOfLines={2} style={styles.tileName}>
         {c.name}
@@ -222,11 +229,11 @@ function CategoryTile({ category: c, width }: { category: CategorySummary; width
           numberOfLines={1}
           adjustsFontSizeToFit
           style={[styles.tileAmount, { color: isOver ? theme.critical : theme.text }]}>
-          {formatPlain(c.remainingCents)}
+          {isDone ? '✓ Paid' : formatPlain(c.remainingCents)}
         </ThemedText>
         {/* The word carries the meaning too, so it does not depend on the colour alone. */}
         <ThemedText type="small" style={[styles.tileCaption, { color: isOver ? theme.critical : theme.textSecondary }]}>
-          {isOver ? 'over' : 'left'}
+          {isDone ? 'done' : isOver ? 'over' : 'left'}
         </ThemedText>
       </View>
       <View>

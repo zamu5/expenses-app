@@ -166,3 +166,15 @@ export function explainMonthStatus(
   }
   return 'On track: the planned end is above zero and no category is over its budget.';
 }
+
+/** A fixed cost (paid in one go) whose budget has been fully spent: nothing more to do this month. */
+export function isPaidInFull(c: Pick<CategoryInput, 'isFixed' | 'budgetCents' | 'spentCents'>): boolean {
+  return c.isFixed && c.budgetCents > 0 && c.spentCents >= c.budgetCents;
+}
+
+/** Puts the fixed costs that are already paid at the end; everything else keeps its order. */
+export function sortPaidLast<T extends Pick<CategoryInput, 'isFixed' | 'budgetCents' | 'spentCents'>>(
+  categories: T[],
+): T[] {
+  return [...categories.filter((c) => !isPaidInFull(c)), ...categories.filter(isPaidInFull)];
+}
