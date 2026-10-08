@@ -39,10 +39,13 @@ export default function MonthScreen() {
   const selectedMonth = useUiStore((s) => s.selectedMonth);
   const { data: overview, error } = useOverview(selectedMonth);
   const data = overview?.monthView;
-  // TILES_PER_ROW tiles per row: the screen width, minus the page padding and the gaps between them.
+  // Two tiles per row on a phone, three on anything wider. The tile width is the screen width
+  // minus the page padding and the gaps between tiles.
   const { width: screenWidth } = useWindowDimensions();
   const contentWidth = screenWidth - Spacing.three * 2;
-  const tileWidth = Math.floor((contentWidth - TILE_GAP * (TILES_PER_ROW - 1)) / TILES_PER_ROW);
+  const isPhone = screenWidth < PHONE_MAX_WIDTH;
+  const tilesPerRow = isPhone ? 2 : 3;
+  const tileWidth = Math.floor((contentWidth - TILE_GAP * (tilesPerRow - 1)) / tilesPerRow);
   const { data: incomes } = useDbQuery((db) => listIncomes(db, selectedMonth), [selectedMonth]);
 
   return (
@@ -82,7 +85,7 @@ export default function MonthScreen() {
             <SectionLabel>Categories</SectionLabel>
             <View style={[styles.grid, { gap: TILE_GAP }]}>
               {sortPaidLast(data.summary.categories).map((c) => (
-                <CategoryTile key={c.id} category={c} width={tileWidth} compact={tileWidth < 150} />
+                <CategoryTile key={c.id} category={c} width={tileWidth} compact={isPhone} />
               ))}
             </View>
 
@@ -194,7 +197,8 @@ function Stat({
   );
 }
 
-const TILES_PER_ROW = 3;
+/** Below this window width the layout is a phone's: two tiles per row, and the short "x spent". */
+const PHONE_MAX_WIDTH = 600;
 const TILE_GAP = Spacing.two;
 
 /** An amount with its cents but without the currency symbol ("1,200.00"), to fit a small tile. */
@@ -214,7 +218,7 @@ function CategoryTile({
 }: {
   category: CategorySummary;
   width: number;
-  /** The tile is too narrow (a phone) for the budget next to the spending. */
+  /** On a phone the spending line is just "x spent", without the budget. */
   compact: boolean;
 }) {
   const theme = useTheme();
@@ -294,19 +298,19 @@ const styles = StyleSheet.create({
     padding: Spacing.two,
   },
   grid: { flexDirection: 'row', flexWrap: 'wrap' },
-  tile: { borderRadius: 12, padding: 6, justifyContent: 'space-between', gap: 6 },
+  tile: { borderRadius: 12, padding: 10, justifyContent: 'space-between', gap: Spacing.two },
   // Two lines are always reserved, so tiles in a row line up whatever the name length.
   // Room for a two-line name, so tiles in a row line up whatever the name length.
-  tileHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 3, minHeight: 30 },
+  tileHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.two, minHeight: 38 },
   // Takes whatever width the amount leaves, wrapping onto more lines.
-  tileName: { flex: 1, minWidth: 0, fontSize: 12, lineHeight: 15, fontWeight: 700 },
+  tileName: { flex: 1, minWidth: 0, fontSize: 16, lineHeight: 19, fontWeight: 700 },
   // Never shrinks: the amount is always whole, and the name gets what is left.
   tileTopRight: { alignItems: 'flex-end', flexShrink: 0 },
-  tileAmount: { fontSize: 11, lineHeight: 15, fontWeight: 700, fontVariant: ['tabular-nums'] },
-  tileSpentRow: { flexDirection: 'row', justifyContent: 'space-between', gap: Spacing.one },
+  tileAmount: { fontSize: 16, lineHeight: 19, fontWeight: 700, fontVariant: ['tabular-nums'] },
+  tileSpentRow: { flexDirection: 'row', justifyContent: 'space-between', gap: Spacing.two },
   // Gives way to the percentage when the box is narrow.
   tileSpent: { flexShrink: 1, minWidth: 0 },
-  tileCaption: { fontSize: 11, lineHeight: 14, fontVariant: ['tabular-nums'] },
+  tileCaption: { fontSize: 12, lineHeight: 16, fontVariant: ['tabular-nums'] },
   between: {
     flexDirection: 'row',
     justifyContent: 'space-between',
