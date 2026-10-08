@@ -7,7 +7,7 @@ import type { Cents } from './money';
  */
 
 export type Person = 'sergio' | 'adriana';
-/** Who an expense was for: both people 50/50, or one person only. */
+/** Who an expense was for: both people (split by a percentage), or one person only. */
 export type ForWhom = 'shared' | Person;
 
 export const otherPerson = (p: Person): Person => (p === 'sergio' ? 'adriana' : 'sergio');
@@ -15,14 +15,14 @@ export const otherPerson = (p: Person): Person => (p === 'sergio' ? 'adriana' : 
 export interface SplitTotals {
   /** Shared expenses in full, by who paid. Only for display. */
   sharedPaidBy: Record<Person, Cents>;
-  /** The other person's half of those shared expenses, added up expense by expense. */
+  /** What the person who did not pay owes for those shared expenses, added up expense by expense. */
   sharedOwedTo: Record<Person, Cents>;
   /** Expenses for one person only that the other one paid. The payer is owed all of it. */
   paidForOtherBy: Record<Person, Cents>;
   /** Money already handed to the other person to settle up, by who gave it. */
   settledBy: Record<Person, Cents>;
   /**
-   * The other person's part of the refunds the budget owner received: half of a shared refund,
+   * The other person's part of the refunds the budget owner received: their share of a shared refund,
    * all of a refund that was only for them. The owner owes it back.
    */
   refundsOwedToOther: Cents;
@@ -56,29 +56,40 @@ export function describeBalance(
 /** The person whose budget and accounts this app tracks. The other one is who they split with. */
 export const BUDGET_OWNER: Person = 'sergio';
 
+/** The budget owner's share of a shared expense when nothing else was chosen: half. */
+export const DEFAULT_OWNER_SHARE_PCT = 50;
+
 /**
- * The other person's half of a shared expense. An odd cent stays with whoever paid:
- * 83.35 shared means the other person owes 41.67 and the payer keeps 41.68.
+ * A share of an amount, in whole cents, rounded down. It is always the share of the person who
+ * did NOT pay (or did not receive the money), so an odd cent stays with whoever paid:
+ * 83.35 at 50% means the other person owes 41.67 and the payer keeps 41.68.
  * This one rule is behind every split number in the app.
  */
-export function sharedHalfOwedCents(amountCents: Cents): Cents {
-  return Math.floor(amountCents / 2);
+export function shareCents(amountCents: Cents, pct: number): Cents {
+  return Math.floor((amountCents * pct) / 100);
+}
+
+/** What the database needs to know about an expense to split it. */
+export interface SplitExpense {
+  amountCents: Cents;
+  paidBy: Person;
+  forWhom: ForWhom;
+  /** The owner's share of a shared expense, 0-100. Fixed when the expense was logged. */
+  ownerSharePct?: number;
 }
 
 /**
  * What one expense costs the budget owner: all of it when it was only for them, none of it when
- * it was only for the other person, and for a shared one their half (the bigger half by a cent
- * when they paid and the amount is odd). The rest is what expenseDebt() says is owed.
+ * it was only for the other person, and for a shared one their percentage. The rest is what
+ * expenseDebt() says is owed, so the two always add up to what was paid.
  */
-export function ownerShareCents(expense: {
-  amountCents: Cents;
-  paidBy: Person;
-  forWhom: ForWhom;
-}): Cents {
+export function ownerShareCents(expense: SplitExpense): Cents {
   if (expense.forWhom === BUDGET_OWNER) return expense.amountCents;
   if (expense.forWhom !== 'shared') return 0;
-  const otherHalf = sharedHalfOwedCents(expense.amountCents);
-  return expense.paidBy === BUDGET_OWNER ? expense.amountCents - otherHalf : otherHalf;
+  const pct = expense.ownerSharePct ?? DEFAULT_OWNER_SHARE_PCT;
+  return expense.paidBy === BUDGET_OWNER
+    ? expense.amountCents - shareCents(expense.amountCents, 100 - pct)
+    : shareCents(expense.amountCents, pct);
 }
 
 /** The two filters on the Expenses tab. They combine: e.g. shared expenses that the second person paid. */
@@ -101,34 +112,46 @@ export function matchesSplitFilter(
 
 /**
  * What one expense adds to the balance between the two people: who owes, and how much.
- * A shared expense makes the other person owe half; an expense that was only for the other
- * person makes them owe all of it; paying for yourself creates no debt (null).
+ * A shared expense makes the person who did not pay owe their percentage; an expense that was
+ * only for the other person makes them owe all of it; paying for yourself creates no debt (null).
  */
-export function expenseDebt(expense: {
-  amountCents: Cents;
-  paidBy: Person;
-  forWhom: ForWhom;
-}): { debtor: Person; cents: Cents } | null {
+export function expenseDebt(expense: SplitExpense): { debtor: Person; cents: Cents } | null {
   if (expense.forWhom === expense.paidBy) return null;
   const debtor = otherPerson(expense.paidBy);
-  return {
-    debtor,
-    cents:
-      expense.forWhom === 'shared' ? sharedHalfOwedCents(expense.amountCents) : expense.amountCents,
-  };
+  if (expense.forWhom !== 'shared') return { debtor, cents: expense.amountCents };
+  const ownerPct = expense.ownerSharePct ?? DEFAULT_OWNER_SHARE_PCT;
+  const debtorPct = debtor === BUDGET_OWNER ? ownerPct : 100 - ownerPct;
+  return { debtor, cents: shareCents(expense.amountCents, debtorPct) };
+}
+
+/** A refund: money the budget owner got back for something bought earlier. */
+export interface SplitRefund {
+  amountCents: Cents;
+  forWhom: ForWhom;
+  /** The owner's share of a shared refund, 0-100. Fixed when it was logged. */
+  ownerSharePct?: number;
 }
 
 /**
- * A refund is money the budget owner got back for something bought earlier. This is the part of
- * it that belongs to the other person, which the owner now owes them: half of a shared refund
- * (the odd cent stays with the owner, who received it), all of one that was only for them.
+ * The part of a refund that belongs to the other person, which the owner now owes them: their
+ * percentage of a shared refund (the odd cent stays with the owner, who received it), all of one
+ * that was only for them.
  */
-export function refundOwedToOtherCents(refund: { amountCents: Cents; forWhom: ForWhom }): Cents {
+export function refundOwedToOtherCents(refund: SplitRefund): Cents {
   if (refund.forWhom === BUDGET_OWNER) return 0;
-  return refund.forWhom === 'shared' ? sharedHalfOwedCents(refund.amountCents) : refund.amountCents;
+  if (refund.forWhom !== 'shared') return refund.amountCents;
+  return shareCents(refund.amountCents, 100 - (refund.ownerSharePct ?? DEFAULT_OWNER_SHARE_PCT));
 }
 
 /** The part of a refund that lowers the budget owner's own spending: the rest of it. */
-export function refundOwnerShareCents(refund: { amountCents: Cents; forWhom: ForWhom }): Cents {
+export function refundOwnerShareCents(refund: SplitRefund): Cents {
   return refund.amountCents - refundOwedToOtherCents(refund);
+}
+
+/** Cleans what was typed as the owner's share: a whole number from 0 to 100, or null. */
+export function parseSharePct(input: string): number | null {
+  const text = input.trim().replace(/%$/, '').trim();
+  if (!/^\d{1,3}$/.test(text)) return null;
+  const pct = Number(text);
+  return pct <= 100 ? pct : null;
 }

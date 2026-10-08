@@ -47,7 +47,13 @@ import {
   getSplitTotals,
   listSettlements,
 } from '../repositories/settlements';
-import { DEFAULT_PEOPLE_NAMES, getPeopleNames, setPeopleNames } from '../repositories/settings';
+import {
+  DEFAULT_PEOPLE_NAMES,
+  getOwnerSharePct,
+  getPeopleNames,
+  setOwnerSharePct,
+  setPeopleNames,
+} from '../repositories/settings';
 import type { Db } from '../types';
 import { createTestDb } from './node-db';
 
@@ -878,5 +884,116 @@ describe('the two names are a setting', () => {
     await setPeopleNames(db, { sergio: 'Kept', adriana: 'Also kept' });
     await restoreBackup(db, parsed.backup);
     expect(await getPeopleNames(db)).toEqual({ sergio: 'Kept', adriana: 'Also kept' });
+  });
+});
+
+describe('an adjustable split for shared expenses', () => {
+  const spentIn = async (categoryId: string) =>
+    (await getMonthCategoryInputs(db, '2026-10')).find((c) => c.id === categoryId)!.spentCents;
+
+  it('is 50 until changed, and only accepts 0 to 100', async () => {
+    expect(await getOwnerSharePct(db)).toBe(50);
+    await setOwnerSharePct(db, 60);
+    expect(await getOwnerSharePct(db)).toBe(60);
+    await expect(setOwnerSharePct(db, 101)).rejects.toThrow(/0 to 100/);
+    await expect(setOwnerSharePct(db, 33.5)).rejects.toThrow(/0 to 100/);
+  });
+
+  it('a new shared expense takes the setting, each way, odd cents included', async () => {
+    const fun = await idOf('Fun');
+    await saveMonthPlan(db, { month: '2026-10', budgets: [{ categoryId: fun, amountCents: 100000 }] });
+    await setOwnerSharePct(db, 60);
+
+    await addExpense(db, { categoryId: fun, amountCents: 1001, spentOn: '2026-10-05', paidBy: 'sergio', forWhom: 'shared' });
+    // The other person owes 40% rounded down (4.00); the payer keeps the rest (6.01).
+    expect(balanceCents(await getSplitTotals(db))).toBe(400);
+    expect(await spentIn(fun)).toBe(601);
+
+    await addExpense(db, { categoryId: fun, amountCents: 1001, spentOn: '2026-10-06', paidBy: 'adriana', forWhom: 'shared' });
+    // Now the owner owes 60% rounded down (6.00): 4.00 - 6.00.
+    expect(balanceCents(await getSplitTotals(db))).toBe(-200);
+    expect(await spentIn(fun)).toBe(1201);
+  });
+
+  it('changing the setting does not touch what was already logged', async () => {
+    const fun = await idOf('Fun');
+    await saveMonthPlan(db, { month: '2026-10', budgets: [{ categoryId: fun, amountCents: 100000 }] });
+    const old = await addExpense(db, { categoryId: fun, amountCents: 10000, spentOn: '2026-10-05', paidBy: 'sergio', forWhom: 'shared' });
+    await setOwnerSharePct(db, 70);
+    expect(balanceCents(await getSplitTotals(db))).toBe(5000);
+    expect(await spentIn(fun)).toBe(5000);
+
+    // Editing the old expense keeps its own split.
+    await updateExpense(db, old, { categoryId: fun, amountCents: 20000, spentOn: '2026-10-05', paidBy: 'sergio', forWhom: 'shared' });
+    expect((await listExpenses(db, '2026-10'))[0].ownerSharePct).toBe(50);
+    expect(balanceCents(await getSplitTotals(db))).toBe(10000);
+
+    // A new one uses 70/30.
+    await addExpense(db, { categoryId: fun, amountCents: 10000, spentOn: '2026-10-07', paidBy: 'sergio', forWhom: 'shared' });
+    expect(balanceCents(await getSplitTotals(db))).toBe(13000);
+    expect(await spentIn(fun)).toBe(17000);
+  });
+
+  it('shared refunds follow it too', async () => {
+    const fun = await idOf('Fun');
+    await saveMonthPlan(db, { month: '2026-10', budgets: [{ categoryId: fun, amountCents: 100000 }] });
+    await setOwnerSharePct(db, 60);
+    await addExpense(db, { categoryId: fun, amountCents: 20000, spentOn: '2026-10-05', paidBy: 'sergio', forWhom: 'shared' });
+    await addIncome(db, { amountCents: 10000, receivedOn: '2026-10-09', categoryId: fun, forWhom: 'shared' });
+    // Owed: 40% of 200.00 minus 40% of the 100.00 refund. Spent: 60% of each.
+    expect(balanceCents(await getSplitTotals(db))).toBe(4000);
+    expect(await spentIn(fun)).toBe(6000);
+  });
+
+  it('every line still adds up to the headline with mixed splits', async () => {
+    const fun = await idOf('Fun');
+    for (const [pct, amount, payer] of [[50, 8335, 'sergio'], [60, 1001, 'sergio'], [60, 4999, 'adriana'], [25, 333, 'adriana']] as const) {
+      await setOwnerSharePct(db, pct);
+      await addExpense(db, { categoryId: fun, amountCents: amount, spentOn: '2026-10-05', paidBy: payer, forWhom: 'shared' });
+    }
+    const lines = (await listDebtExpenses(db)).map((e) => expenseDebt(e)!);
+    const owedBy = (debtor: string) => lines.filter((l) => l.debtor === debtor).reduce((sum, l) => sum + l.cents, 0);
+    expect(balanceCents(await getSplitTotals(db))).toBe(owedBy('adriana') - owedBy('sergio'));
+
+    const spent = (await getMonthCategoryInputs(db, '2026-10')).find((c) => c.id === fun)!.spentCents;
+    expect(spent).toBe((await listExpenses(db, '2026-10')).reduce((sum, e) => sum + ownerShareCents(e), 0));
+  });
+
+  it('expenses from before the upgrade are half and half', async () => {
+    db = createTestDb();
+    await migrate(db, 11);
+    const fun = (await db.getFirstAsync<{ id: string }>("SELECT id FROM categories WHERE name = 'Fun'", []))!.id;
+    await db.runAsync(
+      `INSERT INTO expenses (id, category_id, amount_cents, spent_on, paid_by, for_whom, created_at, updated_at)
+       VALUES ('e1', ?, 10000, '2026-10-01', 'sergio', 'shared', 'x', 'x')`,
+      [fun],
+    );
+    await migrate(db);
+    expect((await listExpenses(db, '2026-10'))[0].ownerSharePct).toBe(50);
+    expect(balanceCents(await getSplitTotals(db))).toBe(5000);
+  });
+
+  it('travels with a backup, and an old backup restores as half and half', async () => {
+    const fun = await idOf('Fun');
+    await setOwnerSharePct(db, 60);
+    await addExpense(db, { categoryId: fun, amountCents: 10000, spentOn: '2026-10-05', paidBy: 'sergio', forWhom: 'shared' });
+    const parsed = parseBackup(JSON.stringify(await exportBackup(db)), LATEST_SCHEMA_VERSION);
+    if (!parsed.ok) throw new Error(parsed.error);
+    expect(parsed.backup.ownerSharePct).toBe(60);
+
+    db = createTestDb();
+    await migrate(db);
+    await restoreBackup(db, parsed.backup);
+    expect(await getOwnerSharePct(db)).toBe(60);
+    expect(balanceCents(await getSplitTotals(db))).toBe(4000);
+
+    // A backup from before this existed: no setting, and no column on the rows.
+    delete parsed.backup.ownerSharePct;
+    parsed.backup.tables.expenses = parsed.backup.tables.expenses.map(({ owner_share_pct, ...rest }) => rest);
+    db = createTestDb();
+    await migrate(db);
+    await restoreBackup(db, parsed.backup);
+    expect(await getOwnerSharePct(db)).toBe(50);
+    expect(balanceCents(await getSplitTotals(db))).toBe(5000);
   });
 });

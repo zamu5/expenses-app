@@ -31,6 +31,8 @@ export interface Backup {
   tables: Record<BackupTable, BackupRow[]>;
   /** The two display names, by person id. Missing in backups made before names were a setting. */
   people?: Record<string, string>;
+  /** The owner's share of new shared expenses, 0-100. Missing in older backups. */
+  ownerSharePct?: number;
 }
 
 /** Tables that exist since schema version 1. Newer ones may be missing from an old backup. */
@@ -41,9 +43,11 @@ export function buildBackup(
   schemaVersion: number,
   exportedAt: string,
   people?: Record<string, string>,
+  ownerSharePct?: number,
 ): Backup {
   const backup: Backup = { app: BACKUP_APP, format: BACKUP_FORMAT, schemaVersion, exportedAt, tables };
   if (people) backup.people = people;
+  if (ownerSharePct !== undefined) backup.ownerSharePct = ownerSharePct;
   return backup;
 }
 
@@ -114,9 +118,13 @@ export function parseBackup(text: string, appSchemaVersion: number): ParsedBacku
     if (entries.length > 0) people = Object.fromEntries(entries);
   }
 
+  const pct = file.ownerSharePct;
+  const ownerSharePct =
+    typeof pct === 'number' && Number.isInteger(pct) && pct >= 0 && pct <= 100 ? pct : undefined;
+
   return {
     ok: true,
-    backup: buildBackup(tables, file.schemaVersion, file.exportedAt, people),
+    backup: buildBackup(tables, file.schemaVersion, file.exportedAt, people, ownerSharePct),
   };
 }
 

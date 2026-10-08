@@ -152,7 +152,7 @@ function Overview({ category: c }: { category: CategorySummary }) {
         <Stat label="Expected by month end" cents={c.projectedSpendCents} />
       </View>
       <ThemedText type="small" themeColor="textSecondary">
-        Counts your share only: half of shared expenses, none of what was only for {people.adriana}.
+        Counts your share only: your part of shared expenses, none of what was only for {people.adriana}.
         Refunds are taken off.
       </ThemedText>
       {c.pace !== null ? (

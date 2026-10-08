@@ -41,7 +41,7 @@ export default function BalanceScreen() {
         </ThemedText>
         <Money cents={balance?.amountCents ?? 0} type="subtitle" />
         <ThemedText type="small" themeColor="textSecondary" style={{ textAlign: 'center' }}>
-          Running total of every month. Shared expenses are split 50/50.
+          Running total of every month. Each line is the part owed, not the full expense.
         </ThemedText>
       </Card>
 
@@ -75,7 +75,10 @@ export default function BalanceScreen() {
                   <View style={{ flex: 1 }}>
                     <ThemedText numberOfLines={1}>{e.note ?? e.categoryName}</ThemedText>
                     <ThemedText type="small" themeColor="textSecondary">
-                      {formatDay(e.spentOn)} · {e.forWhom === 'shared' ? 'half of shared' : 'paid in full'}
+                      {formatDay(e.spentOn)} ·{' '}
+                      {e.forWhom === 'shared'
+                        ? `${debtor === BUDGET_OWNER ? e.ownerSharePct : 100 - e.ownerSharePct}% of shared`
+                        : 'paid in full'}
                     </ThemedText>
                   </View>
                   <Money cents={cents} />

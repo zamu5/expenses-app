@@ -86,10 +86,12 @@ category in the plan takes it out of that month only.
 
 ## Who paid, and who owes whom
 
-Every expense records who paid and who it was for: shared 50/50, or only one of you. From that the
+Every expense records who paid and who it was for: shared, or only one of you. A shared expense
+is divided by a percentage you set under **Settings and backup** (half and half unless you change
+it); each expense keeps the split it was logged with. From that the
 app keeps a running balance across all months ("Adriana owes Sergio $40"), shown at the top of the
 Month tab. Tap it to see where the number comes from and to record a payment that settles it.
-Budgets count only your share: half of a shared expense, all of one that was only for you, and
+Budgets count only your share: your part of a shared expense, all of one that was only for you, and
 nothing of one that was only for the other person, whoever paid. A 83.34 shared expense in a 100
 budget leaves 58.33.
 

@@ -221,6 +221,17 @@ const migrations: ((db: Db) => Promise<void>)[] = [
       ]);
     }
   },
+
+  // Version 12: how a shared expense is divided becomes a number kept on each expense and
+  // refund: the budget owner's share, in percent. Everything logged so far was half and half.
+  async (db) => {
+    await db.execAsync(`
+      ALTER TABLE expenses ADD COLUMN owner_share_pct INTEGER NOT NULL DEFAULT 50
+        CHECK (owner_share_pct BETWEEN 0 AND 100);
+      ALTER TABLE incomes ADD COLUMN owner_share_pct INTEGER NOT NULL DEFAULT 50
+        CHECK (owner_share_pct BETWEEN 0 AND 100);
+    `);
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = migrations.length;

@@ -1,4 +1,4 @@
-import type { Person } from '@/domain/split';
+import { DEFAULT_OWNER_SHARE_PCT, type Person } from '@/domain/split';
 import { nowISO } from '@/lib/id';
 
 import { notifyDataChanged } from '../events';
@@ -44,5 +44,27 @@ export async function setPeopleNames(db: Db, names: PeopleNames): Promise<void> 
       }
     }
   });
+  notifyDataChanged();
+}
+
+const OWNER_SHARE_KEY = 'owner_share_pct';
+
+/** The budget owner's share of a new shared expense, in percent. 50 until it is changed. */
+export async function getOwnerSharePct(db: Db): Promise<number> {
+  const row = await db.getFirstAsync<{ value: string }>('SELECT value FROM settings WHERE key = ?', [
+    OWNER_SHARE_KEY,
+  ]);
+  const pct = row ? Number(row.value) : NaN;
+  return Number.isInteger(pct) && pct >= 0 && pct <= 100 ? pct : DEFAULT_OWNER_SHARE_PCT;
+}
+
+/** Changes the share used for expenses logged from now on. Past expenses keep their own. */
+export async function setOwnerSharePct(db: Db, pct: number): Promise<void> {
+  if (!Number.isInteger(pct) || pct < 0 || pct > 100) throw new Error('The share must be 0 to 100');
+  await db.runAsync(
+    `INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)
+     ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+    [OWNER_SHARE_KEY, String(pct), nowISO()],
+  );
   notifyDataChanged();
 }

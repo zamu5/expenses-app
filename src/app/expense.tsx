@@ -25,12 +25,12 @@ import { useTheme } from '@/hooks/use-theme';
 import { confirmDestructive } from '@/lib/confirm';
 import { useUiStore } from '@/store/ui';
 import type { PeopleNames } from '@/db/repositories/settings';
-import { usePeople } from '@/store/people';
+import { splitRatioLabel, useOwnerSharePct, usePeople } from '@/store/people';
 
 const NO_METHOD = 'none';
 
-const forWhomOptions = (people: PeopleNames): { value: ForWhom; label: string }[] => [
-  { value: 'shared', label: 'Shared 50/50' },
+const forWhomOptions = (people: PeopleNames, ownerSharePct: number): { value: ForWhom; label: string }[] => [
+  { value: 'shared', label: `Shared ${splitRatioLabel(ownerSharePct)}` },
   { value: 'sergio', label: `Only ${people.sergio}` },
   { value: 'adriana', label: `Only ${people.adriana}` },
 ];
@@ -74,7 +74,9 @@ function ExpenseForm({
   initialCategoryId?: string;
 }) {
   const people = usePeople();
-  const FOR_WHOM = forWhomOptions(people);
+  // An expense being edited shows the split it was logged with; a new one, the current setting.
+  const currentSharePct = useOwnerSharePct();
+  const FOR_WHOM = forWhomOptions(people, expense?.ownerSharePct ?? currentSharePct);
   const db = useSQLiteContext();
   const theme = useTheme();
   const selectedMonth = useUiStore((s) => s.selectedMonth);

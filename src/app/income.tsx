@@ -18,7 +18,7 @@ import { useDbQuery } from '@/hooks/use-db-query';
 import { useTheme } from '@/hooks/use-theme';
 import { confirmDestructive } from '@/lib/confirm';
 import { useUiStore } from '@/store/ui';
-import { usePeople } from '@/store/people';
+import { splitRatioLabel, useOwnerSharePct, usePeople } from '@/store/people';
 
 /** Add money you received (salary, a refund), or edit it when opened with ?id=. */
 export default function IncomeScreen() {
@@ -58,6 +58,7 @@ function IncomeForm({
   categories: Category[];
 }) {
   const people = usePeople();
+  const currentSharePct = useOwnerSharePct();
   const db = useSQLiteContext();
   const theme = useTheme();
   const selectedMonth = useUiStore((s) => s.selectedMonth);
@@ -166,7 +167,7 @@ function IncomeForm({
           <Chips
             options={[
               { value: 'sergio', label: `Only ${people.sergio}` },
-              { value: 'shared', label: 'Shared 50/50' },
+              { value: 'shared', label: `Shared ${splitRatioLabel(income?.ownerSharePct ?? currentSharePct)}` },
               { value: 'adriana', label: `Only ${people.adriana}` },
             ]}
             value={forWhom}

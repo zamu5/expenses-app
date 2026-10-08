@@ -139,7 +139,7 @@ export async function setBudget(
  * Everything the Month screen needs, ready for computeMonthSummary(): the categories in this
  * month's plan (see listCategoriesForMonth), plus any other category with spending this month,
  * so money is never hidden.
- * `spentCents` is the budget owner's share: shared expenses count half, and expenses only for the
+ * `spentCents` is the budget owner's share: their percentage of shared expenses, and expenses only for the
  * other person count nothing; refunds for the category are taken off. The database does the summing (SUM + GROUP BY); totals are never stored.
  */
 export async function getMonthCategoryInputs(db: Db, month: MonthKey): Promise<CategoryInput[]> {
@@ -164,12 +164,12 @@ export async function getMonthCategoryInputs(db: Db, month: MonthKey): Promise<C
      LEFT JOIN (
        SELECT category_id,
               SUM(amount_cents) AS any_cents,
-              -- The same rule as ownerShareCents(), expense by expense. "/ 2" rounds down.
+              -- The same rule as ownerShareCents(), expense by expense. "/ 100" rounds down.
               SUM(CASE
                     WHEN for_whom = ? THEN amount_cents
                     WHEN for_whom <> 'shared' THEN 0
-                    WHEN paid_by = ? THEN amount_cents - amount_cents / 2
-                    ELSE amount_cents / 2
+                    WHEN paid_by = ? THEN amount_cents - amount_cents * (100 - owner_share_pct) / 100
+                    ELSE amount_cents * owner_share_pct / 100
                   END) AS share_cents
        FROM expenses
        WHERE spent_on LIKE ? AND deleted_at IS NULL
@@ -180,7 +180,7 @@ export async function getMonthCategoryInputs(db: Db, month: MonthKey): Promise<C
        SELECT category_id,
               SUM(CASE
                     WHEN for_whom = ? THEN amount_cents
-                    WHEN for_whom = 'shared' THEN amount_cents - amount_cents / 2
+                    WHEN for_whom = 'shared' THEN amount_cents - amount_cents * (100 - owner_share_pct) / 100
                     ELSE 0
                   END) AS refund_cents
        FROM incomes

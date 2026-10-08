@@ -2,7 +2,7 @@ import { BACKUP_TABLES, buildBackup, type Backup, type BackupRow, type BackupTab
 import { nowISO } from '@/lib/id';
 
 import { notifyDataChanged } from '../events';
-import { getPeopleNames, setPeopleNames } from './settings';
+import { getOwnerSharePct, getPeopleNames, setOwnerSharePct, setPeopleNames } from './settings';
 import type { Db } from '../types';
 
 const LAST_BACKUP_KEY = 'last_backup_at';
@@ -14,7 +14,13 @@ export async function exportBackup(db: Db): Promise<Backup> {
   for (const table of BACKUP_TABLES) {
     tables[table] = await db.getAllAsync<BackupRow>(`SELECT * FROM ${table}`, []);
   }
-  return buildBackup(tables, version?.user_version ?? 0, nowISO(), { ...(await getPeopleNames(db)) });
+  return buildBackup(
+    tables,
+    version?.user_version ?? 0,
+    nowISO(),
+    { ...(await getPeopleNames(db)) },
+    await getOwnerSharePct(db),
+  );
 }
 
 /**
@@ -49,6 +55,7 @@ export async function restoreBackup(db: Db, backup: Backup): Promise<void> {
   if (backup.people?.sergio && backup.people?.adriana) {
     await setPeopleNames(db, { sergio: backup.people.sergio, adriana: backup.people.adriana });
   }
+  if (backup.ownerSharePct !== undefined) await setOwnerSharePct(db, backup.ownerSharePct);
   notifyDataChanged();
 }
 

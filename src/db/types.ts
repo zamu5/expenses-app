@@ -46,6 +46,8 @@ export interface Expense {
   forWhom: ForWhom;
   /** The account or credit card it was paid with, whose balance it lowered. Null when not tracked. */
   paymentAccountId: string | null;
+  /** For a shared expense: the budget owner's share in percent, fixed when it was logged. */
+  ownerSharePct: number;
 }
 
 /** Money received: a salary, a refund. It raises the month's balance; it is not a negative expense. */
@@ -59,10 +61,12 @@ export interface Income {
    * category's spending and is not counted as income.
    */
   categoryId: string | null;
-  /** For a refund: whose spending it gives back. Shared means half of it belongs to the other person. */
+  /** For a refund: whose spending it gives back. Shared means part of it belongs to the other person. */
   forWhom: ForWhom;
   /** The account the money went into, whose balance it was added to. Null when none was picked. */
   accountId: string | null;
+  /** For a shared refund: the budget owner's share in percent, fixed when it was logged. */
+  ownerSharePct: number;
 }
 
 export type AccountKind = 'account' | 'planned';
