@@ -1,6 +1,6 @@
 import type { CategoryInput } from '@/domain/budget';
 import type { MonthKey } from '@/domain/dates';
-import { BUDGET_OWNER, ownerShareCents } from '@/domain/split';
+import { BUDGET_OWNER } from '@/domain/split';
 import { newId, nowISO } from '@/lib/id';
 
 import { notifyDataChanged } from '../events';
@@ -128,12 +128,11 @@ export async function getMonthCategoryInputs(db: Db, month: MonthKey): Promise<C
     is_fixed: number;
     budget_cents: number | null;
     any_cents: number | null;
-    own_cents: number | null;
-    shared_cents: number | null;
+    share_cents: number | null;
   }>(
     `SELECT c.id, c.name, c.is_fixed,
             CASE WHEN b.deleted_at IS NULL THEN b.amount_cents END AS budget_cents,
-            s.any_cents, s.own_cents, s.shared_cents
+            s.any_cents, s.share_cents
      FROM categories c
      LEFT JOIN (
        SELECT b.category_id, b.amount_cents, b.deleted_at FROM category_budgets b
@@ -143,8 +142,13 @@ export async function getMonthCategoryInputs(db: Db, month: MonthKey): Promise<C
      LEFT JOIN (
        SELECT category_id,
               SUM(amount_cents) AS any_cents,
-              SUM(CASE WHEN for_whom = ? THEN amount_cents ELSE 0 END) AS own_cents,
-              SUM(CASE WHEN for_whom = 'shared' THEN amount_cents ELSE 0 END) AS shared_cents
+              -- The same rule as ownerShareCents(), expense by expense. "/ 2" rounds down.
+              SUM(CASE
+                    WHEN for_whom = ? THEN amount_cents
+                    WHEN for_whom <> 'shared' THEN 0
+                    WHEN paid_by = ? THEN amount_cents - amount_cents / 2
+                    ELSE amount_cents / 2
+                  END) AS share_cents
        FROM expenses
        WHERE spent_on LIKE ? AND deleted_at IS NULL
        GROUP BY category_id
@@ -155,13 +159,13 @@ export async function getMonthCategoryInputs(db: Db, month: MonthKey): Promise<C
              AND (c.archived_at IS NULL OR b.amount_cents > 0))
          OR (b.category_id IS NULL AND c.is_monthly = 1 AND c.archived_at IS NULL))
      ORDER BY c.sort_order, c.name`,
-    [month, BUDGET_OWNER, `${month}-%`],
+    [month, BUDGET_OWNER, BUDGET_OWNER, `${month}-%`],
   );
   return rows.map((r) => ({
     id: r.id,
     name: r.name,
     isFixed: r.is_fixed === 1,
     budgetCents: r.budget_cents ?? 0,
-    spentCents: ownerShareCents(r.own_cents ?? 0, r.shared_cents ?? 0),
+    spentCents: r.share_cents ?? 0,
   }));
 }

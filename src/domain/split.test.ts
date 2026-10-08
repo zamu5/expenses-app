@@ -5,11 +5,13 @@ import {
   matchesSplitFilter,
   NO_SPLIT_FILTER,
   ownerShareCents,
+  sharedHalfOwedCents,
   type SplitTotals,
 } from './split';
 
 const totals = (over: Partial<SplitTotals> = {}): SplitTotals => ({
   sharedPaidBy: { sergio: 0, adriana: 0 },
+  sharedOwedTo: { sergio: 0, adriana: 0 },
   paidForOtherBy: { sergio: 0, adriana: 0 },
   settledBy: { sergio: 0, adriana: 0 },
   ...over,
@@ -21,9 +23,9 @@ describe('balanceCents (what Adriana owes Sergio)', () => {
   });
 
   it('splits shared expenses 50/50', () => {
-    expect(balanceCents(totals({ sharedPaidBy: { sergio: 10000, adriana: 0 } }))).toBe(5000);
-    expect(balanceCents(totals({ sharedPaidBy: { sergio: 0, adriana: 10000 } }))).toBe(-5000);
-    expect(balanceCents(totals({ sharedPaidBy: { sergio: 10000, adriana: 4000 } }))).toBe(3000);
+    expect(balanceCents(totals({ sharedOwedTo: { sergio: 5000, adriana: 0 } }))).toBe(5000);
+    expect(balanceCents(totals({ sharedOwedTo: { sergio: 0, adriana: 5000 } }))).toBe(-5000);
+    expect(balanceCents(totals({ sharedOwedTo: { sergio: 5000, adriana: 2000 } }))).toBe(3000);
   });
 
   it('owes in full what one person paid for the other', () => {
@@ -34,7 +36,7 @@ describe('balanceCents (what Adriana owes Sergio)', () => {
   it('settling up brings the balance back to zero', () => {
     expect(
       balanceCents(
-        totals({ sharedPaidBy: { sergio: 10000, adriana: 0 }, settledBy: { sergio: 0, adriana: 5000 } }),
+        totals({ sharedOwedTo: { sergio: 5000, adriana: 0 }, settledBy: { sergio: 0, adriana: 5000 } }),
       ),
     ).toBe(0);
     expect(
@@ -44,9 +46,6 @@ describe('balanceCents (what Adriana owes Sergio)', () => {
     ).toBe(0);
   });
 
-  it('rounds an odd shared total once', () => {
-    expect(balanceCents(totals({ sharedPaidBy: { sergio: 1001, adriana: 0 } }))).toBe(501);
-  });
 });
 
 describe('describeBalance', () => {
@@ -57,17 +56,45 @@ describe('describeBalance', () => {
   });
 });
 
-describe('ownerShareCents', () => {
-  it('counts half of what was shared and all of what was only for the owner', () => {
-    // Gas: budget 100, one shared expense of 83.34 -> 41.67 counts, 58.33 is left.
-    expect(ownerShareCents(0, 8334)).toBe(4167);
-    expect(ownerShareCents(2500, 8334)).toBe(6667);
-    expect(ownerShareCents(2500, 0)).toBe(2500);
-    expect(ownerShareCents(0, 0)).toBe(0);
+describe('sharedHalfOwedCents', () => {
+  it('is exactly half of an even amount', () => {
+    expect(sharedHalfOwedCents(8334)).toBe(4167);
+    expect(sharedHalfOwedCents(0)).toBe(0);
   });
 
-  it('rounds the half once, on the total', () => {
-    expect(ownerShareCents(0, 1001)).toBe(501);
+  it('leaves the odd cent with whoever paid', () => {
+    expect(sharedHalfOwedCents(8335)).toBe(4167);
+    expect(sharedHalfOwedCents(1)).toBe(0);
+  });
+});
+
+describe('ownerShareCents', () => {
+  const share = (amountCents: number, paidBy: 'sergio' | 'adriana', forWhom: 'shared' | 'sergio' | 'adriana') =>
+    ownerShareCents({ amountCents, paidBy, forWhom });
+
+  it('counts half of what was shared, whoever paid', () => {
+    // Gas: budget 100, one shared expense of 83.34 -> 41.67 counts, 58.33 is left.
+    expect(share(8334, 'sergio', 'shared')).toBe(4167);
+    expect(share(8334, 'adriana', 'shared')).toBe(4167);
+  });
+
+  it('counts all of what was only for the owner and none of what was only for the other', () => {
+    expect(share(2500, 'sergio', 'sergio')).toBe(2500);
+    expect(share(2500, 'adriana', 'sergio')).toBe(2500);
+    expect(share(2500, 'sergio', 'adriana')).toBe(0);
+    expect(share(2500, 'adriana', 'adriana')).toBe(0);
+  });
+
+  it('gives the odd cent to whoever paid', () => {
+    expect(share(8335, 'sergio', 'shared')).toBe(4168);
+    expect(share(8335, 'adriana', 'shared')).toBe(4167);
+  });
+
+  it('plus what the other person owes is always the full amount the owner paid', () => {
+    for (const amountCents of [8334, 8335, 1, 99999]) {
+      const e = { amountCents, paidBy: 'sergio', forWhom: 'shared' } as const;
+      expect(ownerShareCents(e) + expenseDebt(e)!.cents).toBe(amountCents);
+    }
   });
 });
 
@@ -103,6 +130,8 @@ describe('expenseDebt', () => {
   it('is half for a shared expense, owed by whoever did not pay', () => {
     expect(expenseDebt({ amountCents: 8334, paidBy: 'sergio', forWhom: 'shared' })).toEqual({ debtor: 'adriana', cents: 4167 });
     expect(expenseDebt({ amountCents: 3000, paidBy: 'adriana', forWhom: 'shared' })).toEqual({ debtor: 'sergio', cents: 1500 });
+    // The odd cent stays with the payer.
+    expect(expenseDebt({ amountCents: 8335, paidBy: 'sergio', forWhom: 'shared' })).toEqual({ debtor: 'adriana', cents: 4167 });
   });
 
   it('is the full amount when one person paid something only for the other', () => {

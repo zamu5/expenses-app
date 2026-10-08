@@ -4,7 +4,7 @@
 import { computeNetWorth } from '@/domain/accounts';
 import { parseBackup } from '@/domain/backup';
 import { computeMonthSummary } from '@/domain/budget';
-import { balanceCents, expenseDebt } from '@/domain/split';
+import { balanceCents, expenseDebt, ownerShareCents } from '@/domain/split';
 
 import { subscribeToDataChanges } from '../events';
 import { LATEST_SCHEMA_VERSION, migrate } from '../migrations';
@@ -461,5 +461,35 @@ describe('the detail behind what is owed', () => {
     ]);
     // The items add up to the balance: 2,500 + 4,167 - 1,500.
     expect(balanceCents(await getSplitTotals(db))).toBe(5167);
+  });
+});
+
+describe('every split number reconciles to the cent', () => {
+  it('headline = sum of the lines - payments, and the budget share matches, with odd amounts', async () => {
+    const fun = await idOf('Fun');
+    await saveMonthPlan(db, { month: '2026-10', budgets: [{ categoryId: fun, amountCents: 100000 }] });
+    const add = (amountCents: number, paidBy: 'sergio' | 'adriana', forWhom: 'shared' | 'sergio' | 'adriana') =>
+      addExpense(db, { categoryId: fun, amountCents, spentOn: '2026-10-05', paidBy, forWhom });
+    // Odd amounts on purpose: rounding each half on its own must not drift from the total.
+    await add(8335, 'sergio', 'shared');
+    await add(1001, 'sergio', 'shared');
+    await add(333, 'sergio', 'shared');
+    await add(4999, 'adriana', 'shared');
+    await add(777, 'adriana', 'shared');
+    await add(2501, 'sergio', 'adriana');
+    await add(1203, 'adriana', 'sergio');
+    await add(999, 'sergio', 'sergio');
+    await addSettlement(db, { fromPerson: 'adriana', amountCents: 1000, settledOn: '2026-10-06' });
+    await addSettlement(db, { fromPerson: 'sergio', amountCents: 250, settledOn: '2026-10-07' });
+
+    const lines = (await listDebtExpenses(db)).map((e) => expenseDebt(e)!);
+    const owedBy = (debtor: string) => lines.filter((l) => l.debtor === debtor).reduce((sum, l) => sum + l.cents, 0);
+    const headline = balanceCents(await getSplitTotals(db));
+    // Adriana's lines - Sergio's lines - what she paid back + what he paid her.
+    expect(headline).toBe(owedBy('adriana') - owedBy('sergio') - 1000 + 250);
+
+    const everything = await listExpenses(db, '2026-10');
+    const spent = (await getMonthCategoryInputs(db, '2026-10')).find((c) => c.id === fun)!.spentCents;
+    expect(spent).toBe(everything.reduce((sum, e) => sum + ownerShareCents(e), 0));
   });
 });

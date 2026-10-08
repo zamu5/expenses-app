@@ -9,9 +9,16 @@ import type { Db, Settlement } from '../types';
  * It covers every month: the balance is a running total, not a monthly one.
  */
 export async function getSplitTotals(db: Db): Promise<SplitTotals> {
-  const expenses = await db.getAllAsync<{ paid_by: Person; for_whom: ForWhom; total: number }>(
-    `SELECT paid_by, for_whom, SUM(amount_cents) AS total FROM expenses
-     WHERE deleted_at IS NULL GROUP BY paid_by, for_whom`,
+  // amount_cents / 2 is integer division: each expense's half is rounded down on its own,
+  // the same rule as sharedHalfOwedCents().
+  const expenses = await db.getAllAsync<{
+    paid_by: Person;
+    for_whom: ForWhom;
+    total: number;
+    halves: number;
+  }>(
+    `SELECT paid_by, for_whom, SUM(amount_cents) AS total, SUM(amount_cents / 2) AS halves
+     FROM expenses WHERE deleted_at IS NULL GROUP BY paid_by, for_whom`,
     [],
   );
   const settlements = await db.getAllAsync<{ from_person: Person; total: number }>(
@@ -22,10 +29,13 @@ export async function getSplitTotals(db: Db): Promise<SplitTotals> {
 
   const spent = (paidBy: Person, forWhom: ForWhom) =>
     expenses.find((r) => r.paid_by === paidBy && r.for_whom === forWhom)?.total ?? 0;
+  const halves = (paidBy: Person) =>
+    expenses.find((r) => r.paid_by === paidBy && r.for_whom === 'shared')?.halves ?? 0;
   const settled = (from: Person) => settlements.find((r) => r.from_person === from)?.total ?? 0;
 
   return {
     sharedPaidBy: { sergio: spent('sergio', 'shared'), adriana: spent('adriana', 'shared') },
+    sharedOwedTo: { sergio: halves('sergio'), adriana: halves('adriana') },
     paidForOtherBy: { sergio: spent('sergio', 'adriana'), adriana: spent('adriana', 'sergio') },
     settledBy: { sergio: settled('sergio'), adriana: settled('adriana') },
   };
