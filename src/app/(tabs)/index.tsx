@@ -247,14 +247,23 @@ function CategoryTile({ category: c, width }: { category: CategorySummary; width
         </View>
       </View>
       <View>
-        <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} adjustsFontSizeToFit style={styles.tileCaption}>
-          {formatPlain(c.spentCents)} spent
-        </ThemedText>
+        {/* What was spent on the left, how much of the budget that is on the right. */}
+        <View style={styles.tileSpentRow}>
+          <ThemedText
+            type="small"
+            themeColor="textSecondary"
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            style={[styles.tileCaption, styles.tileSpent]}>
+            {formatPlain(c.spentCents)} spent
+          </ThemedText>
+          <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.tileCaption}>
+            {Math.round(ratio * 100)}%
+          </ThemedText>
+        </View>
         <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} adjustsFontSizeToFit style={styles.tileCaption}>
           of {formatPlain(c.budgetCents)}
-        </ThemedText>
-        <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.tileCaption}>
-          {Math.round(ratio * 100)}%{c.isFixed ? ' · fixed' : ''}
+          {c.isFixed ? ' · fixed' : ''}
         </ThemedText>
       </View>
       <ProgressBar ratio={ratio} color={color} />
@@ -283,6 +292,9 @@ const styles = StyleSheet.create({
   // Never shrinks: the amount is always whole, and the name gets what is left.
   tileTopRight: { alignItems: 'flex-end', flexShrink: 0 },
   tileAmount: { fontSize: 11, lineHeight: 15, fontWeight: 700, fontVariant: ['tabular-nums'] },
+  tileSpentRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 3 },
+  // Gives way to the percentage when the box is narrow.
+  tileSpent: { flexShrink: 1, minWidth: 0 },
   tileCaption: { fontSize: 10, lineHeight: 13, fontVariant: ['tabular-nums'] },
   between: {
     flexDirection: 'row',
