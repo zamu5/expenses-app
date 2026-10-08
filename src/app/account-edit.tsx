@@ -98,7 +98,6 @@ function AccountForm({
     account ? centsToInputText(Math.abs(account.balanceCents)) : '',
   );
   const [isPaymentDefault, setIsPaymentDefault] = useState(account?.isPaymentDefault ?? false);
-  const [includeInStart, setIncludeInStart] = useState(account?.includeInStart ?? true);
   const [isIncomeDefault, setIsIncomeDefault] = useState(account?.isIncomeDefault ?? false);
 
   const currency = parseCurrencyCode(currencyText);
@@ -118,7 +117,6 @@ function AccountForm({
       accountType,
       currency,
       balanceCents,
-      includeInStart,
       // Never claim the default while another account holds it.
       isIncomeDefault: incomeDefaultName === null && currency === CURRENCY && !isCard && isIncomeDefault,
       linkedAccountId: isCard ? linkedAccountId : null,
@@ -260,15 +258,6 @@ function AccountForm({
         </ThemedText>
       ) : null}
 
-      {/* Planned expenses always subtract, so they have no switch. */}
-      {!isPlanned ? (
-        <ToggleRow
-          label="Include in starting balance"
-          hint={'Counts toward "Started with" on the Month tab.'}
-          value={includeInStart}
-          onValueChange={setIncludeInStart}
-        />
-      ) : null}
       {/* Income is typed in the home currency, so only an account in it can receive income. */}
       {isPlanned || isCard || currency !== CURRENCY ? null : incomeDefaultName === null ? (
         <ToggleRow

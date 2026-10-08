@@ -34,7 +34,6 @@ export default function RootLayout() {
           <Stack.Screen name="categories" options={{ presentation: 'modal', title: 'Categories' }} />
           <Stack.Screen name="category-edit" options={{ presentation: 'modal', title: 'Category' }} />
           <Stack.Screen name="balance" options={{ presentation: 'modal', title: 'Balance' }} />
-          <Stack.Screen name="started-with" options={{ presentation: 'modal', title: 'Started with' }} />
           <Stack.Screen name="settings" options={{ presentation: 'modal', title: 'Backup' }} />
         </Stack>
       </SQLiteProvider>

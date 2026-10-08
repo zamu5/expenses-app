@@ -57,7 +57,7 @@ export async function getPreviousPlan(
 
 export interface MonthPlan {
   month: MonthKey;
-  /** No longer used by the app; a new month stores 0. */
+  /** What the month starts with. Left out, an existing month keeps what it had. */
   startingBalanceCents?: number;
   /** Income expected this month. Left out, an existing month keeps what it had. */
   expectedIncomeCents?: number;
@@ -73,17 +73,19 @@ export async function saveMonthPlan(db: Db, plan: MonthPlan): Promise<void> {
     await db.runAsync(
       `INSERT INTO months
          (id, month_key, starting_balance_cents, expected_income_cents, created_at, updated_at)
-       VALUES (?, ?, ?, COALESCE(?, 0), ?, ?)
+       VALUES (?, ?, COALESCE(?, 0), COALESCE(?, 0), ?, ?)
        ON CONFLICT (month_key) DO UPDATE SET
+         starting_balance_cents = COALESCE(?, starting_balance_cents),
          expected_income_cents = COALESCE(?, expected_income_cents),
          updated_at = excluded.updated_at`,
       [
         newId(),
         plan.month,
-        plan.startingBalanceCents ?? 0,
+        plan.startingBalanceCents ?? null,
         plan.expectedIncomeCents ?? null,
         now,
         now,
+        plan.startingBalanceCents ?? null,
         plan.expectedIncomeCents ?? null,
       ],
     );

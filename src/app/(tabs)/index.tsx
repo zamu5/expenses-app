@@ -60,7 +60,7 @@ export default function MonthScreen() {
           <>
             <EmptyState
               title={`Plan ${formatMonth(selectedMonth)}`}
-              body="Set a budget for each category. What you start with comes from your accounts."
+              body="Set what you start the month with and a budget for each category."
             />
             <Button title="Plan this month" onPress={() => router.push('/plan')} />
           </>
@@ -69,7 +69,7 @@ export default function MonthScreen() {
         {data?.month ? (
           <>
             <BalanceCard
-              startingCents={overview?.startedWithCents ?? 0}
+              startingCents={data.month.startingBalanceCents}
               incomeCents={data.summary.totalIncomeCents}
               currentCents={overview?.netWorth.totalHomeCents ?? 0}
               missingRates={overview?.netWorth.missingRates ?? []}
@@ -104,7 +104,7 @@ export default function MonthScreen() {
 }
 
 function BalanceCard(props: {
-  /** Accounts marked "include in starting balance", minus planned expenses. */
+  /** Saved with the month's plan: typed for the first month, the current balance after that. */
   startingCents: number;
   incomeCents: number;
   /** The Accounts tab total: every account, what is owed, minus planned expenses and what is left to spend. */
@@ -164,7 +164,7 @@ function BalanceCard(props: {
         </ThemedText>
       </Pressable>
       <View style={styles.between}>
-        <Stat label="Started with" cents={props.startingCents} onPress={() => router.push('/started-with')} />
+        <Stat label="Started with" cents={props.startingCents} onPress={() => router.push('/plan')} />
         <Stat label="Planned end" cents={props.plannedCents} />
       </View>
       <View style={[styles.between, styles.incomeRow, { borderTopColor: theme.separator }]}>

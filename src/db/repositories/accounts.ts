@@ -11,7 +11,6 @@ interface AccountRow {
   account_type: AccountType;
   currency: string;
   balance_cents: number;
-  include_in_start: number;
   is_income_default: number;
   linked_account_id: string | null;
   is_payment_default: number;
@@ -25,7 +24,6 @@ const toAccount = (r: AccountRow): Account => ({
   accountType: r.account_type,
   currency: r.currency,
   balanceCents: r.balance_cents,
-  includeInStart: r.include_in_start === 1,
   isIncomeDefault: r.is_income_default === 1,
   linkedAccountId: r.linked_account_id,
   isPaymentDefault: r.is_payment_default === 1,
@@ -33,7 +31,7 @@ const toAccount = (r: AccountRow): Account => ({
 });
 
 const COLUMNS =
-  'id, name, kind, account_type, currency, balance_cents, include_in_start, is_income_default, linked_account_id, is_payment_default, balance_updated_on';
+  'id, name, kind, account_type, currency, balance_cents, is_income_default, linked_account_id, is_payment_default, balance_updated_on';
 
 /** Accounts first, then planned expenses, each in the order they were added. */
 export async function listAccounts(db: Db): Promise<Account[]> {
@@ -60,8 +58,6 @@ export interface AccountInput {
   accountType?: AccountType;
   currency: string;
   balanceCents: number;
-  /** Defaults to true. */
-  includeInStart?: boolean;
   /** Pre-select this account when logging an income. Turning it on turns it off elsewhere. */
   isIncomeDefault?: boolean;
   /** Makes it a credit card paid from that account. Its balance should then be negative. */
@@ -112,9 +108,9 @@ export async function createAccount(db: Db, input: AccountInput): Promise<string
       )) === null;
     await db.runAsync(
       `INSERT INTO accounts
-         (id, name, kind, account_type, currency, balance_cents, include_in_start, is_income_default,
+         (id, name, kind, account_type, currency, balance_cents, is_income_default,
           linked_account_id, is_payment_default, balance_updated_on, sort_order, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), -1) + 1 FROM accounts), ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), -1) + 1 FROM accounts), ?, ?)`,
       [
         id,
         input.name.trim(),
@@ -122,7 +118,6 @@ export async function createAccount(db: Db, input: AccountInput): Promise<string
         accountType,
         input.currency,
         input.balanceCents,
-        (input.includeInStart ?? true) ? 1 : 0,
         isIncomeDefault ? 1 : 0,
         linkedAccountId,
         isPaymentDefault ? 1 : 0,
@@ -152,7 +147,7 @@ export async function updateAccount(db: Db, id: string, input: AccountInput): Pr
   await db.withTransactionAsync(async () => {
     await db.runAsync(
       `UPDATE accounts SET name = ?, account_type = ?, currency = ?, balance_cents = ?,
-         include_in_start = ?, is_income_default = ?, linked_account_id = ?, is_payment_default = ?,
+         is_income_default = ?, linked_account_id = ?, is_payment_default = ?,
          balance_updated_on = ?, updated_at = ?
        WHERE id = ?`,
       [
@@ -160,7 +155,6 @@ export async function updateAccount(db: Db, id: string, input: AccountInput): Pr
         accountType,
         input.currency,
         input.balanceCents,
-        (input.includeInStart ?? true) ? 1 : 0,
         isIncomeDefault ? 1 : 0,
         linkedAccountId,
         isPaymentDefault ? 1 : 0,

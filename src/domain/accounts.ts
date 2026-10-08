@@ -73,37 +73,21 @@ export function computeNetWorth(
 }
 
 /**
- * What a month starts with: every account marked "include in starting balance", minus every
- * planned expense. Nothing is typed for the month itself. Returns a NetWorth so currencies
- * without a rate are flagged the same way as in the total.
+ * What a new month starts with: the current balance at the moment it is planned, that is,
+ * everything in the accounts (credit cards count as negative), plus what the other person owes
+ * (or minus what is owed to them), minus planned expenses. The budget still to spend is left
+ * out on purpose: it belongs to the month being planned.
  */
-export function computeStartedWith(
-  accounts: (NetWorthItem & { includeInStart: boolean })[],
+export function computeStartingBalance(
+  accounts: NetWorthItem[],
+  owedCents: Cents,
   rates: Record<string, number>,
   homeCurrency: string,
 ): NetWorth {
   return computeNetWorth(
-    accounts.filter((a) => a.kind === 'planned' || a.includeInStart),
+    [...accounts, { kind: 'account', currency: homeCurrency, balanceCents: owedCents }],
     rates,
     homeCurrency,
-  );
-}
-
-/**
- * Money that moved through the accounts during the month and is already inside their balances:
- * income and refunds paid in, or (called with expenses) payments taken out. Undoing it gives what
- * the month really started with, so nothing is counted twice.
- */
-export function depositsIntoStartCents(
-  deposits: { accountId: string | null; amountCents: Cents }[],
-  accounts: { id: string; kind: 'account' | 'planned'; includeInStart: boolean }[],
-): Cents {
-  const counted = new Set(
-    accounts.filter((a) => a.kind === 'account' && a.includeInStart).map((a) => a.id),
-  );
-  return deposits.reduce(
-    (total, d) => total + (d.accountId && counted.has(d.accountId) ? d.amountCents : 0),
-    0,
   );
 }
 

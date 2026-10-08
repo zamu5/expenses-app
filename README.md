@@ -132,8 +132,10 @@ currency. Nothing is predefined; you add, rename and delete accounts yourself.
 - Two rows are worked out by the app: what the two of you owe each other, and **Left to spend**
   (the month's budget not spent yet, counted as negative).
 - The total of this tab is the **Current balance** on the Month tab.
-- **Started with** on the Month tab is every account with **Include in starting balance** switched
-  on, minus planned expenses. Nothing is typed for the month itself.
+- **Started with** on the Month tab is saved with the month's plan. You type it for your first
+  month. For every month after that the plan shows your current balance (accounts, plus or minus
+  what the two of you owe each other, minus planned expenses) and saves it when you save the plan.
+  If that number looks wrong, an account balance is off: fix it in Accounts.
 
 The math is in `src/domain/accounts.ts`.
 
