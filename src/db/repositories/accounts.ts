@@ -10,6 +10,7 @@ interface AccountRow {
   currency: string;
   balance_cents: number;
   include_in_start: number;
+  is_income_default: number;
   balance_updated_on: string;
 }
 
@@ -20,11 +21,12 @@ const toAccount = (r: AccountRow): Account => ({
   currency: r.currency,
   balanceCents: r.balance_cents,
   includeInStart: r.include_in_start === 1,
+  isIncomeDefault: r.is_income_default === 1,
   balanceUpdatedOn: r.balance_updated_on,
 });
 
 const COLUMNS =
-  'id, name, kind, currency, balance_cents, include_in_start, balance_updated_on';
+  'id, name, kind, currency, balance_cents, include_in_start, is_income_default, balance_updated_on';
 
 /** Accounts first, then planned expenses, each in the order they were added. */
 export async function listAccounts(db: Db): Promise<Account[]> {
@@ -51,49 +53,70 @@ export interface AccountInput {
   balanceCents: number;
   /** Defaults to true. */
   includeInStart?: boolean;
+  /** Pre-select this account when logging an income. Turning it on turns it off elsewhere. */
+  isIncomeDefault?: boolean;
   /** Day the balance was typed, 'YYYY-MM-DD'. */
   balanceUpdatedOn: string;
+}
+
+/** Only one account is the default for income, so marking one unmarks the others. */
+async function keepOneIncomeDefault(db: Db, id: string, now: string): Promise<void> {
+  await db.runAsync(
+    'UPDATE accounts SET is_income_default = 0, updated_at = ? WHERE is_income_default = 1 AND id <> ?',
+    [now, id],
+  );
 }
 
 export async function createAccount(db: Db, input: AccountInput): Promise<string> {
   const id = newId();
   const now = nowISO();
-  await db.runAsync(
-    `INSERT INTO accounts
-       (id, name, kind, currency, balance_cents, include_in_start, balance_updated_on,
-        sort_order, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), -1) + 1 FROM accounts), ?, ?)`,
-    [
-      id,
-      input.name.trim(),
-      input.kind,
-      input.currency,
-      input.balanceCents,
-      (input.includeInStart ?? true) ? 1 : 0,
-      input.balanceUpdatedOn,
-      now,
-      now,
-    ],
-  );
+  const isIncomeDefault = input.kind === 'account' && input.isIncomeDefault === true;
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      `INSERT INTO accounts
+         (id, name, kind, currency, balance_cents, include_in_start, is_income_default,
+          balance_updated_on, sort_order, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), -1) + 1 FROM accounts), ?, ?)`,
+      [
+        id,
+        input.name.trim(),
+        input.kind,
+        input.currency,
+        input.balanceCents,
+        (input.includeInStart ?? true) ? 1 : 0,
+        isIncomeDefault ? 1 : 0,
+        input.balanceUpdatedOn,
+        now,
+        now,
+      ],
+    );
+    if (isIncomeDefault) await keepOneIncomeDefault(db, id, now);
+  });
   notifyDataChanged();
   return id;
 }
 
 export async function updateAccount(db: Db, id: string, input: AccountInput): Promise<void> {
-  await db.runAsync(
-    `UPDATE accounts SET name = ?, currency = ?, balance_cents = ?, include_in_start = ?,
-       balance_updated_on = ?, updated_at = ?
-     WHERE id = ?`,
-    [
-      input.name.trim(),
-      input.currency,
-      input.balanceCents,
-      (input.includeInStart ?? true) ? 1 : 0,
-      input.balanceUpdatedOn,
-      nowISO(),
-      id,
-    ],
-  );
+  const now = nowISO();
+  const isIncomeDefault = input.kind === 'account' && input.isIncomeDefault === true;
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      `UPDATE accounts SET name = ?, currency = ?, balance_cents = ?, include_in_start = ?,
+         is_income_default = ?, balance_updated_on = ?, updated_at = ?
+       WHERE id = ?`,
+      [
+        input.name.trim(),
+        input.currency,
+        input.balanceCents,
+        (input.includeInStart ?? true) ? 1 : 0,
+        isIncomeDefault ? 1 : 0,
+        input.balanceUpdatedOn,
+        now,
+        id,
+      ],
+    );
+    if (isIncomeDefault) await keepOneIncomeDefault(db, id, now);
+  });
   notifyDataChanged();
 }
 

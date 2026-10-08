@@ -138,7 +138,7 @@ export async function setBudget(
  * month's plan (see listCategoriesForMonth), plus any other category with spending this month,
  * so money is never hidden.
  * `spentCents` is the budget owner's share: shared expenses count half, and expenses only for the
- * other person count nothing. The database does the summing (SUM + GROUP BY); totals are never stored.
+ * other person count nothing; refunds for the category are taken off. The database does the summing (SUM + GROUP BY); totals are never stored.
  */
 export async function getMonthCategoryInputs(db: Db, month: MonthKey): Promise<CategoryInput[]> {
   const rows = await db.getAllAsync<{
@@ -148,10 +148,11 @@ export async function getMonthCategoryInputs(db: Db, month: MonthKey): Promise<C
     budget_cents: number | null;
     any_cents: number | null;
     share_cents: number | null;
+    refund_cents: number | null;
   }>(
     `SELECT c.id, c.name, c.is_fixed,
             CASE WHEN b.deleted_at IS NULL THEN b.amount_cents END AS budget_cents,
-            s.any_cents, s.share_cents
+            s.any_cents, s.share_cents, r.refund_cents
      FROM categories c
      LEFT JOIN (
        SELECT b.category_id, b.amount_cents, b.deleted_at FROM category_budgets b
@@ -172,19 +173,33 @@ export async function getMonthCategoryInputs(db: Db, month: MonthKey): Promise<C
        WHERE spent_on LIKE ? AND deleted_at IS NULL
        GROUP BY category_id
      ) s ON s.category_id = c.id
+     LEFT JOIN (
+       -- Refunds for this category in the month: the owner's part, as refundOwnerShareCents().
+       SELECT category_id,
+              SUM(CASE
+                    WHEN for_whom = ? THEN amount_cents
+                    WHEN for_whom = 'shared' THEN amount_cents - amount_cents / 2
+                    ELSE 0
+                  END) AS refund_cents
+       FROM incomes
+       WHERE received_on LIKE ? AND deleted_at IS NULL AND category_id IS NOT NULL
+       GROUP BY category_id
+     ) r ON r.category_id = c.id
      WHERE c.deleted_at IS NULL
        AND (s.any_cents > 0
          OR (b.category_id IS NOT NULL AND b.deleted_at IS NULL
              AND (c.archived_at IS NULL OR b.amount_cents > 0))
          OR (b.category_id IS NULL AND c.is_monthly = 1 AND c.archived_at IS NULL))
      ORDER BY c.sort_order, c.name`,
-    [month, BUDGET_OWNER, BUDGET_OWNER, `${month}-%`],
+    [month, BUDGET_OWNER, BUDGET_OWNER, `${month}-%`, BUDGET_OWNER, `${month}-%`],
   );
   return rows.map((r) => ({
     id: r.id,
     name: r.name,
     isFixed: r.is_fixed === 1,
     budgetCents: r.budget_cents ?? 0,
-    spentCents: r.share_cents ?? 0,
+    // Refunds take away from what was spent. It can go below zero when more came back than
+    // was spent this month; screens show that as zero spent.
+    spentCents: (r.share_cents ?? 0) - (r.refund_cents ?? 0),
   }));
 }

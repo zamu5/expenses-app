@@ -101,6 +101,17 @@ Money you receive (salary, a refund) is logged with **+ Add income** on the Mont
 an expense. The month's plan can hold an **expected salary**: Planned end counts it until the real
 income is logged, and from then on counts whichever is larger, so it is never counted twice.
 
+### Refunds and the account income goes into
+
+When logging an income you can say it is a **refund for a category** (a return, an insurance
+payout). A refund lowers what was spent in that category instead of counting as income, and it
+can be shared or for one person, like an expense.
+
+Every income or refund can also go **into an account**: the amount is added to that account's
+balance (and taken back out if you edit or delete it). One account can be marked as the default
+for income, so it is pre-selected. "Started with" leaves this month's deposits out, so income is
+not counted twice.
+
 ## Accounts and planned expenses
 
 The Accounts tab shows everything in one place: each account in its own currency, the expenses you

@@ -1,4 +1,10 @@
-import { otherPerson, type ForWhom, type Person, type SplitTotals } from '@/domain/split';
+import {
+  BUDGET_OWNER,
+  otherPerson,
+  type ForWhom,
+  type Person,
+  type SplitTotals,
+} from '@/domain/split';
 import { newId, nowISO } from '@/lib/id';
 
 import { notifyDataChanged } from '../events';
@@ -26,6 +32,14 @@ export async function getSplitTotals(db: Db): Promise<SplitTotals> {
      WHERE deleted_at IS NULL GROUP BY from_person`,
     [],
   );
+  // Refunds the owner received: the same rule as refundOwedToOtherCents(), refund by refund.
+  const refunds = await db.getFirstAsync<{ total: number | null }>(
+    `SELECT SUM(CASE WHEN for_whom = 'shared' THEN amount_cents / 2
+                     WHEN for_whom <> ? THEN amount_cents
+                     ELSE 0 END) AS total
+     FROM incomes WHERE deleted_at IS NULL AND category_id IS NOT NULL`,
+    [BUDGET_OWNER],
+  );
 
   const spent = (paidBy: Person, forWhom: ForWhom) =>
     expenses.find((r) => r.paid_by === paidBy && r.for_whom === forWhom)?.total ?? 0;
@@ -38,6 +52,7 @@ export async function getSplitTotals(db: Db): Promise<SplitTotals> {
     sharedOwedTo: { sergio: halves('sergio'), adriana: halves('adriana') },
     paidForOtherBy: { sergio: spent('sergio', 'adriana'), adriana: spent('adriana', 'sergio') },
     settledBy: { sergio: settled('sergio'), adriana: settled('adriana') },
+    refundsOwedToOther: refunds?.total ?? 0,
   };
 }
 

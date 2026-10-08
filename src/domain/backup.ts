@@ -12,9 +12,9 @@ export const BACKUP_TABLES = [
   'categories',
   'category_budgets',
   'expenses',
+  'accounts',
   'incomes',
   'settlements',
-  'accounts',
   'exchange_rates',
 ] as const;
 

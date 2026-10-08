@@ -49,6 +49,15 @@ export interface Income {
   amountCents: number;
   receivedOn: string;
   note: string | null;
+  /**
+   * Set for a refund: the category whose spending this money gives back. A refund lowers that
+   * category's spending and is not counted as income.
+   */
+  categoryId: string | null;
+  /** For a refund: whose spending it gives back. Shared means half of it belongs to the other person. */
+  forWhom: ForWhom;
+  /** The account the money went into, whose balance it was added to. Null when none was picked. */
+  accountId: string | null;
 }
 
 export type AccountKind = 'account' | 'planned';
@@ -66,6 +75,8 @@ export interface Account {
   balanceCents: number;
   /** Whether this account counts toward "Started with" on the Month tab. Planned expenses always subtract. */
   includeInStart: boolean;
+  /** The account pre-selected when logging an income. At most one. */
+  isIncomeDefault: boolean;
   /** Day the balance was last typed in. */
   balanceUpdatedOn: string;
 }

@@ -89,6 +89,24 @@ export function computeStartedWith(
   );
 }
 
+/**
+ * Money paid into the accounts during the month (income and refunds), which is already inside
+ * their balances. Taking it off gives what the month really started with, so income is not
+ * counted twice: once in the balance and once as income.
+ */
+export function depositsIntoStartCents(
+  deposits: { accountId: string | null; amountCents: Cents }[],
+  accounts: { id: string; kind: 'account' | 'planned'; includeInStart: boolean }[],
+): Cents {
+  const counted = new Set(
+    accounts.filter((a) => a.kind === 'account' && a.includeInStart).map((a) => a.id),
+  );
+  return deposits.reduce(
+    (total, d) => total + (d.accountId && counted.has(d.accountId) ? d.amountCents : 0),
+    0,
+  );
+}
+
 /** Cleans what the user typed into an ISO 4217 code, or null when it is not three letters. */
 export function parseCurrencyCode(input: string): string | null {
   const code = input.trim().toUpperCase();

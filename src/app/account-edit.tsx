@@ -60,6 +60,7 @@ function AccountForm({
   const [currencyText, setCurrencyText] = useState(account?.currency ?? CURRENCY);
   const [balanceText, setBalanceText] = useState(account ? centsToInputText(account.balanceCents) : '');
   const [includeInStart, setIncludeInStart] = useState(account?.includeInStart ?? true);
+  const [isIncomeDefault, setIsIncomeDefault] = useState(account?.isIncomeDefault ?? false);
 
   const currency = parseCurrencyCode(currencyText);
   const balanceCents = balanceText.trim() === '' ? 0 : parseAmountToCents(balanceText);
@@ -73,6 +74,7 @@ function AccountForm({
       currency,
       balanceCents,
       includeInStart,
+      isIncomeDefault,
       // Keep the "updated" day unless the balance itself changed.
       balanceUpdatedOn:
         account && account.balanceCents === balanceCents ? account.balanceUpdatedOn : todayISO(),
@@ -147,6 +149,14 @@ function AccountForm({
           hint={'Counts toward "Started with" on the Month tab.'}
           value={includeInStart}
           onValueChange={setIncludeInStart}
+        />
+      ) : null}
+      {!isPlanned ? (
+        <ToggleRow
+          label="Default account for income"
+          hint="Pre-selected when you log an income or a refund. Only one account can be the default."
+          value={isIncomeDefault}
+          onValueChange={setIsIncomeDefault}
         />
       ) : null}
 

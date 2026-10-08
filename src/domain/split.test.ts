@@ -5,6 +5,8 @@ import {
   matchesSplitFilter,
   NO_SPLIT_FILTER,
   ownerShareCents,
+  refundOwedToOtherCents,
+  refundOwnerShareCents,
   sharedHalfOwedCents,
   type SplitTotals,
 } from './split';
@@ -14,6 +16,7 @@ const totals = (over: Partial<SplitTotals> = {}): SplitTotals => ({
   sharedOwedTo: { sergio: 0, adriana: 0 },
   paidForOtherBy: { sergio: 0, adriana: 0 },
   settledBy: { sergio: 0, adriana: 0 },
+  refundsOwedToOther: 0,
   ...over,
 });
 
@@ -142,5 +145,29 @@ describe('expenseDebt', () => {
   it('is nothing when someone paid for themselves', () => {
     expect(expenseDebt({ amountCents: 2500, paidBy: 'sergio', forWhom: 'sergio' })).toBeNull();
     expect(expenseDebt({ amountCents: 2500, paidBy: 'adriana', forWhom: 'adriana' })).toBeNull();
+  });
+});
+
+describe('refunds', () => {
+  it('a shared refund gives half back to each', () => {
+    expect(refundOwedToOtherCents({ amountCents: 10000, forWhom: 'shared' })).toBe(5000);
+    expect(refundOwnerShareCents({ amountCents: 10000, forWhom: 'shared' })).toBe(5000);
+    // The odd cent stays with the owner, who received the money.
+    expect(refundOwedToOtherCents({ amountCents: 1001, forWhom: 'shared' })).toBe(500);
+    expect(refundOwnerShareCents({ amountCents: 1001, forWhom: 'shared' })).toBe(501);
+  });
+
+  it('a refund only for the owner lowers only their spending', () => {
+    expect(refundOwedToOtherCents({ amountCents: 4000, forWhom: 'sergio' })).toBe(0);
+    expect(refundOwnerShareCents({ amountCents: 4000, forWhom: 'sergio' })).toBe(4000);
+  });
+
+  it('a refund only for the other person is owed to them in full', () => {
+    expect(refundOwedToOtherCents({ amountCents: 4000, forWhom: 'adriana' })).toBe(4000);
+    expect(refundOwnerShareCents({ amountCents: 4000, forWhom: 'adriana' })).toBe(0);
+  });
+
+  it('lowers what the other person owes', () => {
+    expect(balanceCents(totals({ sharedOwedTo: { sergio: 10000, adriana: 0 }, refundsOwedToOther: 5000 }))).toBe(5000);
   });
 });

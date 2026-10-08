@@ -1,4 +1,10 @@
-import { computeNetWorth, computeStartedWith, parseCurrencyCode, toHomeCents } from './accounts';
+import {
+  computeNetWorth,
+  computeStartedWith,
+  depositsIntoStartCents,
+  parseCurrencyCode,
+  toHomeCents,
+} from './accounts';
 
 describe('toHomeCents', () => {
   it('converts with a typed rate and rounds to the cent', () => {
@@ -117,5 +123,31 @@ describe('computeStartedWith', () => {
 
   it('is zero with no accounts', () => {
     expect(computeStartedWith([], {}, 'CAD').totalHomeCents).toBe(0);
+  });
+});
+
+describe('depositsIntoStartCents', () => {
+  const accounts = [
+    { id: 'main', kind: 'account' as const, includeInStart: true },
+    { id: 'side', kind: 'account' as const, includeInStart: false },
+  ];
+
+  it('adds up what went into accounts that count toward the start', () => {
+    expect(
+      depositsIntoStartCents(
+        [
+          { accountId: 'main', amountCents: 250000 },
+          { accountId: 'main', amountCents: 4000 },
+          { accountId: 'side', amountCents: 9999 },
+          { accountId: null, amountCents: 7777 },
+          { accountId: 'gone', amountCents: 5555 },
+        ],
+        accounts,
+      ),
+    ).toBe(254000);
+  });
+
+  it('is zero with nothing deposited', () => {
+    expect(depositsIntoStartCents([], accounts)).toBe(0);
   });
 });

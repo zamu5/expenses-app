@@ -287,15 +287,19 @@ describe('accounts', () => {
   });
 
   it('no longer has a budget account: an upgrade clears the old mark', async () => {
-    const id = await account('Chequing', 'CAD', 214498);
-    // Put the database back to how version 5 could look, then run the pending migration.
-    await db.runAsync('UPDATE accounts SET is_budget_account = 1 WHERE id = ?', [id]);
-    await db.execAsync('ALTER TABLE months DROP COLUMN expected_income_cents; PRAGMA user_version = 5');
-    await migrate(db);
+    // A database as it was at version 5, with an account marked the old way.
+    db = createTestDb();
+    await migrate(db, 5);
+    await db.runAsync(
+      `INSERT INTO accounts (id, name, kind, currency, balance_cents, is_budget_account, balance_updated_on, created_at, updated_at)
+       VALUES ('a1', 'Chequing', 'account', 'CAD', 214498, 1, '2026-10-01', 'x', 'x')`,
+      [],
+    );
 
+    await migrate(db);
     const row = await db.getFirstAsync<{ is_budget_account: number }>(
-      'SELECT is_budget_account FROM accounts WHERE id = ?',
-      [id],
+      "SELECT is_budget_account FROM accounts WHERE id = 'a1'",
+      [],
     );
     expect(row?.is_budget_account).toBe(0);
     // The balance is whatever was typed; nothing is worked out for it.
@@ -572,5 +576,118 @@ describe('the part of a split can be for someone else', () => {
     const spent = Object.fromEntries((await getMonthCategoryInputs(db, '2026-10')).map((c) => [c.id, c.spentCents]));
     expect(spent[groceries]).toBe(7500);
     expect(spent[fun]).toBe(0);
+  });
+});
+
+describe('refunds', () => {
+  const setup = async () => {
+    const groceries = await idOf('Groceries');
+    await saveMonthPlan(db, { month: '2026-10', budgets: [{ categoryId: groceries, amountCents: 40000 }] });
+    return groceries;
+  };
+  const spentIn = async (categoryId: string) =>
+    (await getMonthCategoryInputs(db, '2026-10')).find((c) => c.id === categoryId)!.spentCents;
+
+  it('a shared refund on a shared expense gives half back to each', async () => {
+    const groceries = await setup();
+    await addExpense(db, { categoryId: groceries, amountCents: 20000, spentOn: '2026-10-05', paidBy: 'sergio', forWhom: 'shared' });
+    expect(await spentIn(groceries)).toBe(10000);
+    expect(balanceCents(await getSplitTotals(db))).toBe(10000);
+
+    await addIncome(db, { amountCents: 10000, receivedOn: '2026-10-09', categoryId: groceries, forWhom: 'shared' });
+    expect(await spentIn(groceries)).toBe(5000);
+    expect(balanceCents(await getSplitTotals(db))).toBe(5000);
+  });
+
+  it('a refund only for you lowers your spending in full and leaves the balance alone', async () => {
+    const groceries = await setup();
+    await addExpense(db, { categoryId: groceries, amountCents: 20000, spentOn: '2026-10-05', forWhom: 'sergio' });
+    await addIncome(db, { amountCents: 4000, receivedOn: '2026-10-09', categoryId: groceries });
+    expect(await spentIn(groceries)).toBe(16000);
+    expect(balanceCents(await getSplitTotals(db))).toBe(0);
+  });
+
+  it('a refund only for Adriana changes only what is owed', async () => {
+    const groceries = await setup();
+    await addExpense(db, { categoryId: groceries, amountCents: 20000, spentOn: '2026-10-05', paidBy: 'sergio', forWhom: 'adriana' });
+    await addIncome(db, { amountCents: 20000, receivedOn: '2026-10-09', categoryId: groceries, forWhom: 'adriana' });
+    expect(await spentIn(groceries)).toBe(0);
+    expect(balanceCents(await getSplitTotals(db))).toBe(0);
+  });
+
+  it('is not counted as income, and belongs to the month it was received in', async () => {
+    const groceries = await setup();
+    await addIncome(db, { amountCents: 250000, receivedOn: '2026-10-15', note: 'Salary' });
+    await addIncome(db, { amountCents: 4000, receivedOn: '2026-10-09', categoryId: groceries });
+    await addIncome(db, { amountCents: 9900, receivedOn: '2026-11-02', categoryId: groceries });
+    expect(await getIncomeTotal(db, '2026-10')).toBe(250000);
+    expect((await listIncomes(db, '2026-10', groceries)).map((i) => i.amountCents)).toEqual([4000]);
+    expect(await spentIn(groceries)).toBe(-4000);
+  });
+
+  it('a deleted refund no longer counts', async () => {
+    const groceries = await setup();
+    await addExpense(db, { categoryId: groceries, amountCents: 20000, spentOn: '2026-10-05', forWhom: 'sergio' });
+    const refund = await addIncome(db, { amountCents: 4000, receivedOn: '2026-10-09', categoryId: groceries, forWhom: 'shared' });
+    await deleteIncome(db, refund);
+    expect(await spentIn(groceries)).toBe(20000);
+    expect(balanceCents(await getSplitTotals(db))).toBe(0);
+  });
+});
+
+describe('income goes into an account', () => {
+  const account = (name: string, balanceCents: number, extra = {}) =>
+    createAccount(db, { name, kind: 'account', currency: 'CAD', balanceCents, balanceUpdatedOn: '2026-10-01', ...extra });
+  const balanceOf = async (id: string) => (await listAccounts(db)).find((a) => a.id === id)!.balanceCents;
+
+  it('adds the amount to the account, and follows edits and deletes', async () => {
+    const main = await account('Main', 100000);
+    const other = await account('Other', 5000);
+
+    const id = await addIncome(db, { amountCents: 250000, receivedOn: '2026-10-15', accountId: main });
+    expect(await balanceOf(main)).toBe(350000);
+
+    await updateIncome(db, id, { amountCents: 260000, receivedOn: '2026-10-15', accountId: main });
+    expect(await balanceOf(main)).toBe(360000);
+
+    // Moved to another account: out of one, into the other.
+    await updateIncome(db, id, { amountCents: 260000, receivedOn: '2026-10-15', accountId: other });
+    expect(await balanceOf(main)).toBe(100000);
+    expect(await balanceOf(other)).toBe(265000);
+
+    await deleteIncome(db, id);
+    expect(await balanceOf(other)).toBe(5000);
+  });
+
+  it('changes no balance when no account is picked', async () => {
+    const main = await account('Main', 100000);
+    const id = await addIncome(db, { amountCents: 250000, receivedOn: '2026-10-15' });
+    expect(await balanceOf(main)).toBe(100000);
+    await deleteIncome(db, id);
+    expect(await balanceOf(main)).toBe(100000);
+  });
+
+  it('keeps a single default account for income', async () => {
+    const first = await account('First', 0, { isIncomeDefault: true });
+    const second = await account('Second', 0, { isIncomeDefault: true });
+    expect((await listAccounts(db)).filter((a) => a.isIncomeDefault).map((a) => a.id)).toEqual([second]);
+
+    await updateAccount(db, first, { name: 'First', kind: 'account', currency: 'CAD', balanceCents: 0, isIncomeDefault: true, balanceUpdatedOn: '2026-10-02' });
+    expect((await listAccounts(db)).filter((a) => a.isIncomeDefault).map((a) => a.id)).toEqual([first]);
+  });
+
+  it('survives a backup and restore, links included', async () => {
+    const groceries = await idOf('Groceries');
+    const main = await account('Main', 100000, { isIncomeDefault: true });
+    await addIncome(db, { amountCents: 4000, receivedOn: '2026-10-09', accountId: main, categoryId: groceries, forWhom: 'shared' });
+
+    const parsed = parseBackup(JSON.stringify(await exportBackup(db)), LATEST_SCHEMA_VERSION);
+    if (!parsed.ok) throw new Error(parsed.error);
+    db = createTestDb();
+    await migrate(db);
+    await restoreBackup(db, parsed.backup);
+
+    expect((await listIncomes(db, '2026-10'))[0]).toMatchObject({ accountId: main, categoryId: groceries, forWhom: 'shared' });
+    expect((await listAccounts(db))[0]).toMatchObject({ balanceCents: 104000, isIncomeDefault: true });
   });
 });

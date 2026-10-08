@@ -20,6 +20,11 @@ export interface SplitTotals {
   paidForOtherBy: Record<Person, Cents>;
   /** Money already handed to the other person to settle up, by who gave it. */
   settledBy: Record<Person, Cents>;
+  /**
+   * The other person's part of the refunds the budget owner received: half of a shared refund,
+   * all of a refund that was only for them. The owner owes it back.
+   */
+  refundsOwedToOther: Cents;
 }
 
 /**
@@ -31,7 +36,8 @@ export function balanceCents(t: SplitTotals): Cents {
   return (
     (t.sharedOwedTo.sergio - t.sharedOwedTo.adriana) +
     (t.paidForOtherBy.sergio - t.paidForOtherBy.adriana) +
-    (t.settledBy.sergio - t.settledBy.adriana)
+    (t.settledBy.sergio - t.settledBy.adriana) -
+    t.refundsOwedToOther
   );
 }
 
@@ -108,4 +114,19 @@ export function expenseDebt(expense: {
     cents:
       expense.forWhom === 'shared' ? sharedHalfOwedCents(expense.amountCents) : expense.amountCents,
   };
+}
+
+/**
+ * A refund is money the budget owner got back for something bought earlier. This is the part of
+ * it that belongs to the other person, which the owner now owes them: half of a shared refund
+ * (the odd cent stays with the owner, who received it), all of one that was only for them.
+ */
+export function refundOwedToOtherCents(refund: { amountCents: Cents; forWhom: ForWhom }): Cents {
+  if (refund.forWhom === BUDGET_OWNER) return 0;
+  return refund.forWhom === 'shared' ? sharedHalfOwedCents(refund.amountCents) : refund.amountCents;
+}
+
+/** The part of a refund that lowers the budget owner's own spending: the rest of it. */
+export function refundOwnerShareCents(refund: { amountCents: Cents; forWhom: ForWhom }): Cents {
+  return refund.amountCents - refundOwedToOtherCents(refund);
 }

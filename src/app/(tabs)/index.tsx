@@ -69,7 +69,7 @@ export default function MonthScreen() {
         {data?.month ? (
           <>
             <BalanceCard
-              startingCents={overview?.startedWith.totalHomeCents ?? 0}
+              startingCents={overview?.startedWithCents ?? 0}
               incomeCents={data.summary.totalIncomeCents}
               currentCents={overview?.netWorth.totalHomeCents ?? 0}
               missingRates={overview?.netWorth.missingRates ?? []}
@@ -80,7 +80,10 @@ export default function MonthScreen() {
               daysInMonth={data.daysInMonth}
             />
 
-            <IncomeList incomes={incomes ?? []} />
+            <IncomeList
+              incomes={incomes ?? []}
+              categoryNames={new Map(data.summary.categories.map((c) => [c.id, c.name]))}
+            />
 
             <SectionLabel>Categories</SectionLabel>
             <View style={[styles.grid, { gap: TILE_GAP }]}>
@@ -223,7 +226,9 @@ function CategoryTile({
 }) {
   const theme = useTheme();
   const color = useStatusColor(c.status);
-  const ratio = c.budgetCents > 0 ? c.spentCents / c.budgetCents : c.spentCents > 0 ? 1 : 0;
+  // A refund bigger than the month's spending makes "spent" negative; show that as nothing spent.
+  const spentCents = Math.max(0, c.spentCents);
+  const ratio = c.budgetCents > 0 ? spentCents / c.budgetCents : spentCents > 0 ? 1 : 0;
   const isOver = c.remainingCents < 0;
   // A fixed cost paid exactly: done for the month, so it is dimmed and says so.
   const isDone = isPaidInFull(c) && !isOver;
@@ -231,7 +236,7 @@ function CategoryTile({
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${c.name}: ${isDone ? 'paid, ' : ''}${formatPlain(c.remainingCents)} ${isOver ? 'over' : 'left'}, ${formatPlain(c.spentCents)} spent of ${formatPlain(c.budgetCents)}`}
+      accessibilityLabel={`${c.name}: ${isDone ? 'paid, ' : ''}${formatPlain(c.remainingCents)} ${isOver ? 'over' : 'left'}, ${formatPlain(spentCents)} spent of ${formatPlain(c.budgetCents)}`}
       onPress={() => router.push({ pathname: '/category/[id]', params: { id: c.id } })}
       style={({ pressed }) => [
         styles.tile,
@@ -265,7 +270,7 @@ function CategoryTile({
             themeColor="textSecondary"
             numberOfLines={1}
             style={[styles.tileCaption, styles.tileSpent]}>
-            {formatPlain(c.spentCents)} spent
+            {formatPlain(spentCents)} spent
             {compact ? '' : ` of ${formatPlain(c.budgetCents)}`}
           </ThemedText>
           <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.tileCaption}>

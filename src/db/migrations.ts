@@ -165,18 +165,33 @@ const migrations: ((db: Db) => Promise<void>)[] = [
   async (db) => {
     await db.execAsync('ALTER TABLE months ADD COLUMN expected_income_cents INTEGER NOT NULL DEFAULT 0;');
   },
+
+  // Version 8: refunds (an income tied to a category), and the account an income is paid into.
+  async (db) => {
+    await db.execAsync(`
+      -- A category makes the income a refund: it lowers that category's spending instead of
+      -- counting as income. for_whom says whose spending it gives back, like on an expense.
+      ALTER TABLE incomes ADD COLUMN category_id TEXT REFERENCES categories(id);
+      ALTER TABLE incomes ADD COLUMN for_whom TEXT NOT NULL DEFAULT 'sergio'
+        CHECK (for_whom IN ('shared', 'sergio', 'adriana'));
+      ALTER TABLE incomes ADD COLUMN account_id TEXT REFERENCES accounts(id);
+
+      ALTER TABLE accounts ADD COLUMN is_income_default INTEGER NOT NULL DEFAULT 0;
+    `);
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = migrations.length;
 
-export async function migrate(db: Db): Promise<void> {
+/** `upTo` stops at an older schema version; only tests use it, to check an upgrade. */
+export async function migrate(db: Db, upTo: number = migrations.length): Promise<void> {
   // WAL makes reads and writes not block each other; foreign keys are off by default in SQLite.
   await db.execAsync('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
 
   const row = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version', []);
   let version = row?.user_version ?? 0;
 
-  while (version < migrations.length) {
+  while (version < upTo) {
     const next = version + 1;
     await db.withTransactionAsync(async () => {
       await migrations[version](db);

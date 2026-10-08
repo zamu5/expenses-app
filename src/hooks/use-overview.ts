@@ -1,10 +1,12 @@
 import { CURRENCY } from '@/config';
 import { listAccounts, listExchangeRates } from '@/db/repositories/accounts';
+import { listIncomes } from '@/db/repositories/incomes';
 import { getSplitTotals } from '@/db/repositories/settlements';
 import type { Account, Db, ExchangeRate } from '@/db/types';
 import {
   computeNetWorth,
   computeStartedWith,
+  depositsIntoStartCents,
   type NetWorth,
   type NetWorthItem,
 } from '@/domain/accounts';
@@ -31,6 +33,11 @@ export interface Overview {
    * expenses. Accounts keep no history, so their balance as it is today is used.
    */
   startedWith: NetWorth;
+  /**
+   * `startedWith` minus the income and refunds paid into those accounts this month. That money is
+   * already in the balances, and the month counts it separately as income.
+   */
+  startedWithCents: number;
 }
 
 /**
@@ -39,15 +46,17 @@ export interface Overview {
  * people owe each other, and what is left to spend this month.
  */
 export async function loadOverview(db: Db, monthKey: MonthKey): Promise<Overview> {
-  const [accounts, rates, splitTotals] = await Promise.all([
+  const [accounts, rates, splitTotals, incomes] = await Promise.all([
     listAccounts(db),
     listExchangeRates(db),
     getSplitTotals(db),
+    listIncomes(db, monthKey),
   ]);
   const rateOf = Object.fromEntries(rates.map((r) => [r.currency, r.unitsPerHome]));
 
   const startedWith = computeStartedWith(accounts, rateOf, CURRENCY);
-  const monthView = await loadMonthView(db, monthKey, startedWith.totalHomeCents);
+  const startedWithCents = startedWith.totalHomeCents - depositsIntoStartCents(incomes, accounts);
+  const monthView = await loadMonthView(db, monthKey, startedWithCents);
 
   const leftCents = monthView.month ? leftToSpendCents(monthView.summary.categories) : 0;
   const owedCents = balanceCents(splitTotals);
@@ -65,6 +74,7 @@ export async function loadOverview(db: Db, monthKey: MonthKey): Promise<Overview
     leftToSpendCents: leftCents,
     netWorth: computeNetWorth(items, rateOf, CURRENCY),
     startedWith,
+    startedWithCents,
   };
 }
 
