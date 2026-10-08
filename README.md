@@ -111,6 +111,17 @@ currency. Nothing is predefined; you add, rename and delete accounts yourself.
 
 The math is in `src/domain/accounts.ts`.
 
+## Backup and restore
+
+The data lives only on the device (or, on the web, in that browser for that exact address), so
+make backups. **Backup and restore** at the bottom of the Month tab exports everything to one file,
+`expenses-backup-YYYY-MM-DD.json`: on the iPhone through the share sheet (save it to Files or
+iCloud Drive), on the web as a download.
+
+Restoring picks such a file, shows what is in it, and after you confirm replaces all the data in
+the app with it. If anything in the file cannot be restored, nothing is changed. The file format
+is in `src/domain/backup.ts`.
+
 ## Changing the home currency
 
 Edit `CURRENCY` in `src/config.ts` (for example `'EUR'` or `'COP'`). The budget is in this currency

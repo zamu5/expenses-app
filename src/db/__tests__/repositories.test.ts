@@ -2,6 +2,7 @@
  * @jest-environment node
  */
 import { computeNetWorth } from '@/domain/accounts';
+import { parseBackup } from '@/domain/backup';
 import { computeMonthSummary } from '@/domain/budget';
 import { balanceCents } from '@/domain/split';
 
@@ -15,6 +16,7 @@ import {
   setExchangeRate,
   updateAccount,
 } from '../repositories/accounts';
+import { exportBackup, getLastBackupAt, restoreBackup, setLastBackupAt } from '../repositories/backup';
 import {
   createCategory,
   listCategories,
@@ -304,5 +306,72 @@ describe('accounts', () => {
 
     await deleteAccount(db, pesos);
     expect(computeNetWorth(await listAccounts(db), await rates(), 'CAD').totalHomeCents).toBe(800000);
+  });
+});
+
+describe('backup and restore', () => {
+  async function fill() {
+    const fun = await idOf('Fun');
+    await saveMonthPlan(db, { month: '2026-10', startingBalanceCents: 300000, budgets: [{ categoryId: fun, amountCents: 20000 }] });
+    await addExpense(db, { categoryId: fun, amountCents: 3000, spentOn: '2026-10-05', paidBy: 'adriana', forWhom: 'shared', note: 'Movie' });
+    const gone = await addExpense(db, { categoryId: fun, amountCents: 100, spentOn: '2026-10-06' });
+    await deleteExpense(db, gone);
+    await addIncome(db, { amountCents: 250000, receivedOn: '2026-10-15', note: 'Salary' });
+    await addSettlement(db, { fromPerson: 'sergio', amountCents: 1500, settledOn: '2026-10-07' });
+    await createAccount(db, { name: 'Pesos', kind: 'account', currency: 'COP', balanceCents: 295000000, balanceUpdatedOn: '2026-10-07' });
+    await setExchangeRate(db, { currency: 'COP', unitsPerHome: 2950, setOn: '2026-10-07' });
+  }
+  const viaFile = async () => {
+    const parsed = parseBackup(JSON.stringify(await exportBackup(db)), LATEST_SCHEMA_VERSION);
+    if (!parsed.ok) throw new Error(parsed.error);
+    return parsed.backup;
+  };
+
+  it('round trips: export, wipe, restore gives identical data', async () => {
+    await fill();
+    const backup = await viaFile();
+    expect(backup.schemaVersion).toBe(LATEST_SCHEMA_VERSION);
+
+    // A brand new database, as on a new phone, with different starter category ids.
+    db = createTestDb();
+    await migrate(db);
+    await addExpense(db, { categoryId: await idOf('Rent'), amountCents: 999, spentOn: '2026-10-01' });
+
+    await restoreBackup(db, backup);
+    expect((await exportBackup(db)).tables).toEqual(backup.tables);
+    expect((await listExpenses(db, '2026-10')).map((e) => [e.amountCents, e.note, e.paidBy])).toEqual([[3000, 'Movie', 'adriana']]);
+    expect(await getIncomeTotal(db, '2026-10')).toBe(250000);
+    expect((await listAccounts(db)).map((a) => a.name)).toEqual(['Pesos']);
+  });
+
+  it('changes nothing when a row cannot be restored', async () => {
+    await fill();
+    const before = (await exportBackup(db)).tables;
+    const bad = await viaFile();
+    bad.tables.expenses = [{ ...bad.tables.expenses[0], category_id: 'no-such-category' }];
+
+    await expect(restoreBackup(db, bad)).rejects.toThrow(/FOREIGN KEY/);
+    expect((await exportBackup(db)).tables).toEqual(before);
+  });
+
+  it('restores a backup from an older version, filling new columns with defaults', async () => {
+    await fill();
+    const old = await viaFile();
+    old.schemaVersion = 1;
+    old.tables.expenses = old.tables.expenses.map(({ paid_by, for_whom, ...rest }) => rest);
+    old.tables.categories = old.tables.categories.map(({ is_monthly, ...rest }) => ({ ...rest, column_from_the_past: 1 }));
+
+    await restoreBackup(db, old);
+    expect((await listExpenses(db, '2026-10'))[0]).toMatchObject({ paidBy: 'sergio', forWhom: 'shared' });
+    expect((await listCategories(db)).every((c) => c.isMonthly)).toBe(true);
+  });
+
+  it('remembers when the last backup was made, outside the backup itself', async () => {
+    expect(await getLastBackupAt(db)).toBeNull();
+    await setLastBackupAt(db, '2026-10-07T12:00:00.000Z');
+    await setLastBackupAt(db, '2026-10-08T09:00:00.000Z');
+    expect(await getLastBackupAt(db)).toBe('2026-10-08T09:00:00.000Z');
+    await restoreBackup(db, await viaFile());
+    expect(await getLastBackupAt(db)).toBe('2026-10-08T09:00:00.000Z');
   });
 });

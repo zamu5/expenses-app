@@ -137,6 +137,18 @@ const migrations: ((db: Db) => Promise<void>)[] = [
       );
     `);
   },
+
+  // Version 4: small facts about this device, like when the last backup was made.
+  // They are not part of a backup.
+  async (db) => {
+    await db.execAsync(`
+      CREATE TABLE settings (
+        key TEXT PRIMARY KEY NOT NULL,
+        value TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `);
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = migrations.length;
