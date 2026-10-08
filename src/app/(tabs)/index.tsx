@@ -204,7 +204,7 @@ const formatPlain = (cents: number) =>
   );
 
 /**
- * One category as a small box. Top left: what is left of its budget. Then its name, what was
+ * One category as a small box. Top right: what is left of its budget. Then its name, what was
  * spent of how much, and a bar.
  */
 function CategoryTile({ category: c, width }: { category: CategorySummary; width: number }) {
@@ -224,7 +224,7 @@ function CategoryTile({ category: c, width }: { category: CategorySummary; width
         styles.tile,
         { width, backgroundColor: theme.backgroundElement, opacity: pressed ? 0.7 : isDone ? 0.55 : 1 },
       ]}>
-      <View>
+      <View style={styles.tileTopRight}>
         <ThemedText
           numberOfLines={1}
           adjustsFontSizeToFit
@@ -276,6 +276,7 @@ const styles = StyleSheet.create({
   tile: { borderRadius: 12, padding: 6, justifyContent: 'space-between', gap: Spacing.one },
   // Two lines are always reserved, so tiles in a row line up whatever the name length.
   tileName: { fontSize: 15, lineHeight: 18, fontWeight: 700, minHeight: 36 },
+  tileTopRight: { alignItems: 'flex-end' },
   tileAmount: { fontSize: 13, lineHeight: 16, fontWeight: 600, fontVariant: ['tabular-nums'] },
   tileCaption: { fontSize: 10, lineHeight: 13, fontVariant: ['tabular-nums'] },
   between: {
