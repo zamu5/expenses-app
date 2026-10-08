@@ -3,6 +3,7 @@ import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Pressable, StyleSheet, View } from 'react-native';
 
+import { splitLabel } from '@/components/split-label';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import {
@@ -77,11 +78,10 @@ export default function CategoryDetailScreen() {
                 ]}>
                 <View style={{ flex: 1 }}>
                   <ThemedText>{formatDay(e.spentOn)}</ThemedText>
-                  {e.note ? (
-                    <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
-                      {e.note}
-                    </ThemedText>
-                  ) : null}
+                  <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+                    {splitLabel(e)}
+                    {e.note ? ` · ${e.note}` : ''}
+                  </ThemedText>
                 </View>
                 <Money cents={e.amountCents} />
               </Pressable>

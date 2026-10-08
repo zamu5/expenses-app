@@ -18,7 +18,8 @@ export default function CategoriesScreen() {
       <Title>Categories</Title>
       <ThemedText type="small" themeColor="textSecondary">
         Fixed costs are paid once a month (rent, subscriptions). Variable costs are spread over the
-        month, so the app tracks how fast you spend them.
+        month, so the app tracks how fast you spend them. Categories that are not monthly only show
+        in the months you add them to, from that month's plan.
       </ThemedText>
 
       <CategoryList categories={active} />
@@ -52,6 +53,7 @@ function CategoryList({ categories }: { categories: Category[] }) {
           <View>
             <ThemedText type="small" themeColor="textSecondary">
               {c.isFixed ? 'Fixed' : 'Variable'}
+              {c.isMonthly ? '' : ' · Not monthly'}
             </ThemedText>
           </View>
         </Pressable>

@@ -5,6 +5,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { MonthSwitcher } from '@/components/month-switcher';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { splitLabel } from '@/components/split-label';
 import { Card, Chips, EmptyState, Fab, Money, Screen, SectionLabel, Title } from '@/components/ui';
 import { listCategories } from '@/db/repositories/categories';
 import { listExpenses } from '@/db/repositories/expenses';
@@ -88,11 +89,10 @@ export default function ExpensesScreen() {
                   ]}>
                   <View style={{ flex: 1 }}>
                     <ThemedText>{categoryName.get(e.categoryId) ?? 'Unknown'}</ThemedText>
-                    {e.note ? (
-                      <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
-                        {e.note}
-                      </ThemedText>
-                    ) : null}
+                    <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+                      {splitLabel(e)}
+                      {e.note ? ` · ${e.note}` : ''}
+                    </ThemedText>
                   </View>
                   <Money cents={e.amountCents} />
                 </Pressable>

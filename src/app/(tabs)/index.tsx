@@ -1,6 +1,7 @@
 import { router } from 'expo-router';
 import { Pressable, StyleSheet, View } from 'react-native';
 
+import { BalanceBetweenCard } from '@/components/balance-between-card';
 import { MonthSwitcher } from '@/components/month-switcher';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -35,6 +36,8 @@ export default function MonthScreen() {
         <MonthSwitcher />
 
         {error ? <ThemedText>Could not load this month: {error.message}</ThemedText> : null}
+
+        <BalanceBetweenCard />
 
         {data && !data.month ? (
           <>

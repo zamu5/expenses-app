@@ -26,13 +26,14 @@ function CategoryForm({ category }: { category: Category | null }) {
   const db = useSQLiteContext();
   const [name, setName] = useState(category?.name ?? '');
   const [isFixed, setIsFixed] = useState(category?.isFixed ?? false);
+  const [isMonthly, setIsMonthly] = useState(category?.isMonthly ?? true);
   const canSave = name.trim().length > 0;
 
   async function save() {
     if (!canSave) return;
     try {
-      if (category) await updateCategory(db, category.id, { name, isFixed });
-      else await createCategory(db, { name, isFixed });
+      if (category) await updateCategory(db, category.id, { name, isFixed, isMonthly });
+      else await createCategory(db, { name, isFixed, isMonthly });
       router.back();
     } catch (e) {
       Alert.alert('Could not save', e instanceof Error ? e.message : String(e));
@@ -53,6 +54,12 @@ function CategoryForm({ category }: { category: Category | null }) {
         hint="Paid once a month, like rent. The app won't track its pace."
         value={isFixed}
         onValueChange={setIsFixed}
+      />
+      <ToggleRow
+        label="Every month"
+        hint="Turn off for things like insurance or holidays. You add those to a month from its plan."
+        value={isMonthly}
+        onValueChange={setIsMonthly}
       />
       <View style={{ gap: 8, marginTop: 8 }}>
         <Button title={category ? 'Save changes' : 'Add category'} onPress={save} disabled={!canSave} />

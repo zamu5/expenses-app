@@ -74,6 +74,32 @@ const migrations: ((db: Db) => Promise<void>)[] = [
       );
     }
   },
+
+  // Version 2: categories that are not monthly, who paid each expense and who it was for,
+  // and the payments the two people make to each other to settle up.
+  async (db) => {
+    await db.execAsync(`
+      ALTER TABLE categories ADD COLUMN is_monthly INTEGER NOT NULL DEFAULT 1;
+
+      -- Expenses logged before this version count as paid by Sergio and shared 50/50.
+      ALTER TABLE expenses ADD COLUMN paid_by TEXT NOT NULL DEFAULT 'sergio'
+        CHECK (paid_by IN ('sergio', 'adriana'));
+      ALTER TABLE expenses ADD COLUMN for_whom TEXT NOT NULL DEFAULT 'shared'
+        CHECK (for_whom IN ('shared', 'sergio', 'adriana'));
+
+      CREATE TABLE settlements (
+        id TEXT PRIMARY KEY NOT NULL,
+        from_person TEXT NOT NULL CHECK (from_person IN ('sergio', 'adriana')),
+        to_person TEXT NOT NULL CHECK (to_person IN ('sergio', 'adriana')),
+        amount_cents INTEGER NOT NULL CHECK (amount_cents > 0),
+        settled_on TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT,
+        CHECK (from_person <> to_person)
+      );
+    `);
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = migrations.length;

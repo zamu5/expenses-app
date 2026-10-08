@@ -18,6 +18,28 @@ npx expo start
 Scan the QR code with the iPhone camera. The app opens in Expo Go and reloads every time you
 save a file. Phone and computer must be on the same Wi-Fi (or run `npx expo start --tunnel`).
 
+## Run it in Docker
+
+Needs Docker Desktop. The container runs the Expo dev server with your source folder mounted,
+so edits on your machine reload in the app.
+
+```bash
+docker compose up --build     # start; add -d to run it in the background
+docker compose down           # stop
+```
+
+Then open http://localhost:8081 in a browser for the web version.
+
+To open it from a phone on the same Wi-Fi, start it with this machine's LAN IP so the QR code
+points at it:
+
+```bash
+REACT_NATIVE_PACKAGER_HOSTNAME=$(ipconfig getifaddr en0) docker compose up
+```
+
+After changing dependencies in `package.json`, rebuild with fresh modules:
+`docker compose down -v && docker compose up --build`.
+
 ## Everyday commands
 
 | Command | What it does |
@@ -54,6 +76,21 @@ Rules that keep it healthy:
 - **Budget math stays pure.** `src/domain/budget.ts` takes plain values and returns plain values,
   so it is fully unit tested.
 - **Schema changes are new migrations.** Never edit a migration that has shipped; append one.
+
+## Categories that are not monthly
+
+A category marked "Every month" is in every month's plan. Turn that off for things like insurance
+or holidays: they only appear in the months you add them to, from **Plan month**. The × next to a
+category in the plan takes it out of that month only.
+
+## Who paid, and who owes whom
+
+Every expense records who paid and who it was for: shared 50/50, or only one of you. From that the
+app keeps a running balance across all months ("Adriana owes Sergio $40"), shown at the top of the
+Month tab. Tap it to see where the number comes from and to record a payment that settles it.
+Budgets still count the full amount of every expense, whoever paid.
+
+The math is in `src/domain/split.ts`. The two names are `PEOPLE` in `src/config.ts`.
 
 ## Changing the currency
 

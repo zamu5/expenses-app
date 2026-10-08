@@ -5,11 +5,13 @@ import { Alert, Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Button, Card, Chips, Field, Screen, SectionLabel } from '@/components/ui';
-import { listCategories } from '@/db/repositories/categories';
+import { PEOPLE } from '@/config';
+import { listCategories, listCategoriesForMonth } from '@/db/repositories/categories';
 import { addExpense, deleteExpense, getExpense, updateExpense } from '@/db/repositories/expenses';
 import type { Category, Expense } from '@/db/types';
 import { formatDay, monthKeyOf, shiftDay, todayISO } from '@/domain/dates';
 import { centsToInputText, parseAmountToCents } from '@/domain/money';
+import type { ForWhom, Person } from '@/domain/split';
 import { useDbQuery } from '@/hooks/use-db-query';
 import { useTheme } from '@/hooks/use-theme';
 import { useUiStore } from '@/store/ui';
@@ -19,7 +21,7 @@ export default function ExpenseScreen() {
   const { id, categoryId } = useLocalSearchParams<{ id?: string; categoryId?: string }>();
   const { data } = useDbQuery(
     async (db) => ({
-      categories: await listCategories(db),
+      categories: await listCategories(db, { includeArchived: true }),
       expense: id ? await getExpense(db, id) : null,
     }),
     [id],
@@ -48,6 +50,8 @@ function ExpenseForm({
   const db = useSQLiteContext();
   const theme = useTheme();
   const selectedMonth = useUiStore((s) => s.selectedMonth);
+  const lastPaidBy = useUiStore((s) => s.lastPaidBy);
+  const setLastPaidBy = useUiStore((s) => s.setLastPaidBy);
   const today = todayISO();
 
   const [amountText, setAmountText] = useState(expense ? centsToInputText(expense.amountCents) : '');
@@ -59,24 +63,34 @@ function ExpenseForm({
     expense?.spentOn ?? (monthKeyOf(today) === selectedMonth ? today : `${selectedMonth}-01`),
   );
   const [note, setNote] = useState(expense?.note ?? '');
+  const [paidBy, setPaidBy] = useState<Person>(expense?.paidBy ?? lastPaidBy);
+  const [forWhom, setForWhom] = useState<ForWhom>(expense?.forWhom ?? 'shared');
   const [saving, setSaving] = useState(false);
 
   const amountCents = parseAmountToCents(amountText);
   const canSave = amountCents !== null && amountCents > 0 && categoryId !== null && !saving;
 
-  // Archived categories are hidden from the picker, except the one this expense already uses.
-  const options = categories.map((c) => ({ value: c.id, label: c.name }));
-  if (expense && !categories.some((c) => c.id === expense.categoryId)) {
-    options.push({ value: expense.categoryId, label: 'Archived category' });
+  // The picker offers the categories in the plan of the month the expense falls in,
+  // plus the one already selected (it may be archived, or not part of that month).
+  const expenseMonth = monthKeyOf(spentOn);
+  const { data: monthCategories } = useDbQuery(
+    (db) => listCategoriesForMonth(db, expenseMonth),
+    [expenseMonth],
+  );
+  const options = (monthCategories ?? []).map((c) => ({ value: c.id, label: c.name }));
+  const selected = categories.find((c) => c.id === categoryId);
+  if (selected && !options.some((o) => o.value === selected.id)) {
+    options.push({ value: selected.id, label: selected.name });
   }
 
   async function save() {
     if (!canSave) return;
     setSaving(true);
-    const input = { categoryId, amountCents, spentOn, note };
+    const input = { categoryId, amountCents, spentOn, note, paidBy, forWhom };
     try {
       if (expense) await updateExpense(db, expense.id, input);
       else await addExpense(db, input);
+      setLastPaidBy(paidBy);
       router.back();
     } catch (e) {
       setSaving(false);
@@ -118,6 +132,27 @@ function ExpenseForm({
 
       <SectionLabel>Category</SectionLabel>
       <Chips options={options} value={categoryId} onChange={setCategoryId} />
+
+      <SectionLabel>Paid by</SectionLabel>
+      <Chips
+        options={[
+          { value: 'sergio', label: PEOPLE.sergio },
+          { value: 'adriana', label: PEOPLE.adriana },
+        ]}
+        value={paidBy}
+        onChange={setPaidBy}
+      />
+
+      <SectionLabel>For</SectionLabel>
+      <Chips
+        options={[
+          { value: 'shared', label: 'Shared 50/50' },
+          { value: 'sergio', label: `Only ${PEOPLE.sergio}` },
+          { value: 'adriana', label: `Only ${PEOPLE.adriana}` },
+        ]}
+        value={forWhom}
+        onChange={setForWhom}
+      />
 
       <SectionLabel>Date</SectionLabel>
       <Card style={styles.dateRow}>
