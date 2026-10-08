@@ -194,7 +194,7 @@ function Stat({
   );
 }
 
-const TILES_PER_ROW = 2;
+const TILES_PER_ROW = 3;
 const TILE_GAP = Spacing.two;
 
 /** An amount with its cents but without the currency symbol ("1,200.00"), to fit a small tile. */
@@ -261,10 +261,21 @@ function CategoryTile({ category: c, width }: { category: CategorySummary; width
             {Math.round(ratio * 100)}%
           </ThemedText>
         </View>
-        <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} adjustsFontSizeToFit style={styles.tileCaption}>
-          of {formatPlain(c.budgetCents)}
-          {c.isFixed ? ' · fixed' : ''}
-        </ThemedText>
+        <View style={styles.tileSpentRow}>
+          <ThemedText
+            type="small"
+            themeColor="textSecondary"
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            style={[styles.tileCaption, styles.tileSpent]}>
+            of {formatPlain(c.budgetCents)}
+          </ThemedText>
+          {c.isFixed ? (
+            <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.tileCaption}>
+              fixed
+            </ThemedText>
+          ) : null}
+        </View>
       </View>
       <ProgressBar ratio={ratio} color={color} />
     </Pressable>
@@ -284,19 +295,19 @@ const styles = StyleSheet.create({
     padding: Spacing.two,
   },
   grid: { flexDirection: 'row', flexWrap: 'wrap' },
-  tile: { borderRadius: 12, padding: 10, justifyContent: 'space-between', gap: Spacing.two },
+  tile: { borderRadius: 12, padding: 6, justifyContent: 'space-between', gap: 6 },
   // Two lines are always reserved, so tiles in a row line up whatever the name length.
   // Room for a two-line name, so tiles in a row line up whatever the name length.
-  tileHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.two, minHeight: 38 },
+  tileHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 3, minHeight: 30 },
   // Takes whatever width the amount leaves, wrapping onto more lines.
-  tileName: { flex: 1, minWidth: 0, fontSize: 16, lineHeight: 19, fontWeight: 700 },
+  tileName: { flex: 1, minWidth: 0, fontSize: 12, lineHeight: 15, fontWeight: 700 },
   // Never shrinks: the amount is always whole, and the name gets what is left.
   tileTopRight: { alignItems: 'flex-end', flexShrink: 0 },
-  tileAmount: { fontSize: 16, lineHeight: 19, fontWeight: 700, fontVariant: ['tabular-nums'] },
-  tileSpentRow: { flexDirection: 'row', justifyContent: 'space-between', gap: Spacing.two },
+  tileAmount: { fontSize: 11, lineHeight: 15, fontWeight: 700, fontVariant: ['tabular-nums'] },
+  tileSpentRow: { flexDirection: 'row', justifyContent: 'space-between', gap: Spacing.one },
   // Gives way to the percentage when the box is narrow.
   tileSpent: { flexShrink: 1, minWidth: 0 },
-  tileCaption: { fontSize: 12, lineHeight: 16, fontVariant: ['tabular-nums'] },
+  tileCaption: { fontSize: 11, lineHeight: 14, fontVariant: ['tabular-nums'] },
   between: {
     flexDirection: 'row',
     justifyContent: 'space-between',
