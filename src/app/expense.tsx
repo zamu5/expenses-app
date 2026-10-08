@@ -6,7 +6,7 @@ import { Alert, StyleSheet, View } from 'react-native';
 import { DateField } from '@/components/date-field';
 import { ThemedText } from '@/components/themed-text';
 import { Button, Chips, Field, Screen, SectionLabel } from '@/components/ui';
-import { CURRENCY, PEOPLE } from '@/config';
+import { CURRENCY } from '@/config';
 import { listAccounts } from '@/db/repositories/accounts';
 import { listCategories, listCategoriesForMonth } from '@/db/repositories/categories';
 import {
@@ -24,13 +24,15 @@ import { useDbQuery } from '@/hooks/use-db-query';
 import { useTheme } from '@/hooks/use-theme';
 import { confirmDestructive } from '@/lib/confirm';
 import { useUiStore } from '@/store/ui';
+import type { PeopleNames } from '@/db/repositories/settings';
+import { usePeople } from '@/store/people';
 
 const NO_METHOD = 'none';
 
-const FOR_WHOM_OPTIONS: { value: ForWhom; label: string }[] = [
+const forWhomOptions = (people: PeopleNames): { value: ForWhom; label: string }[] => [
   { value: 'shared', label: 'Shared 50/50' },
-  { value: 'sergio', label: `Only ${PEOPLE.sergio}` },
-  { value: 'adriana', label: `Only ${PEOPLE.adriana}` },
+  { value: 'sergio', label: `Only ${people.sergio}` },
+  { value: 'adriana', label: `Only ${people.adriana}` },
 ];
 
 /** Add a new expense, or edit one when opened with ?id=. */
@@ -71,6 +73,8 @@ function ExpenseForm({
   methods: Account[];
   initialCategoryId?: string;
 }) {
+  const people = usePeople();
+  const FOR_WHOM = forWhomOptions(people);
   const db = useSQLiteContext();
   const theme = useTheme();
   const selectedMonth = useUiStore((s) => s.selectedMonth);
@@ -197,7 +201,7 @@ function ExpenseForm({
           />
           <SectionLabel>That part is for</SectionLabel>
           <Chips
-            options={FOR_WHOM_OPTIONS}
+            options={FOR_WHOM}
             value={partForWhom ?? forWhom}
             onChange={setPartForWhom}
           />
@@ -208,7 +212,7 @@ function ExpenseForm({
               {categories.find((c) => c.id === partCategoryId)?.name ?? 'other category'}{' '}
               {centsToInputText(part.partCents)}
               {(partForWhom ?? forWhom) !== forWhom
-                ? ` (${FOR_WHOM_OPTIONS.find((o) => o.value === partForWhom)?.label})`
+                ? ` (${FOR_WHOM.find((o) => o.value === partForWhom)?.label})`
                 : ''}
             </ThemedText>
           ) : partText !== '' ? (
@@ -234,8 +238,8 @@ function ExpenseForm({
       <SectionLabel>Paid by</SectionLabel>
       <Chips
         options={[
-          { value: 'sergio', label: PEOPLE.sergio },
-          { value: 'adriana', label: PEOPLE.adriana },
+          { value: 'sergio', label: people.sergio },
+          { value: 'adriana', label: people.adriana },
         ]}
         value={paidBy}
         onChange={setPaidBy}
@@ -257,7 +261,7 @@ function ExpenseForm({
 
       <SectionLabel>For</SectionLabel>
       <Chips
-        options={FOR_WHOM_OPTIONS}
+        options={FOR_WHOM}
         value={forWhom}
         onChange={setForWhom}
       />

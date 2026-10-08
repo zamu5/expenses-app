@@ -2,7 +2,8 @@ import type { Cents } from './money';
 
 /**
  * Who owes whom between the two people sharing expenses. Pure functions, like the budget math.
- * The ids are what the database stores; display names live in config.ts.
+ * The ids are what the database stores. They are internal labels for "person 1" (the budget owner)
+ * and "person 2", fixed since the first version; the names shown come from Settings.
  */
 
 export type Person = 'sergio' | 'adriana';
@@ -28,7 +29,8 @@ export interface SplitTotals {
 }
 
 /**
- * What Adriana owes Sergio. Negative means Sergio owes Adriana; 0 means all square.
+ * What the second person owes the first (the budget owner). Negative means the owner owes them;
+ * 0 means all square.
  * It is the sum of expenseDebt() over every expense, minus the payments between the two,
  * so the lines on the Balance screen always add up to it exactly.
  */
@@ -79,7 +81,7 @@ export function ownerShareCents(expense: {
   return expense.paidBy === BUDGET_OWNER ? expense.amountCents - otherHalf : otherHalf;
 }
 
-/** The two filters on the Expenses tab. They combine: e.g. shared expenses that Adriana paid. */
+/** The two filters on the Expenses tab. They combine: e.g. shared expenses that the second person paid. */
 export interface SplitFilter {
   paidBy: 'all' | Person;
   forWhom: 'all' | ForWhom;

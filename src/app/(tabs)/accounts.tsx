@@ -5,7 +5,7 @@ import { Alert, Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Button, Card, EmptyState, Field, Money, Screen, SectionLabel, Title } from '@/components/ui';
-import { CURRENCY, PEOPLE } from '@/config';
+import { CURRENCY } from '@/config';
 import { setExchangeRate } from '@/db/repositories/accounts';
 import type { Account, ExchangeRate } from '@/db/types';
 import { formatDay, formatMonth, todayISO } from '@/domain/dates';
@@ -13,12 +13,14 @@ import { describeBalance } from '@/domain/split';
 import { useOverview } from '@/hooks/use-overview';
 import { useTheme } from '@/hooks/use-theme';
 import { useUiStore } from '@/store/ui';
+import { usePeople } from '@/store/people';
 
 /**
  * Everything you have and everything you expect to spend, in one place: accounts in any currency,
  * planned expenses counted as negative, and a total in the home currency.
  */
 export default function AccountsScreen() {
+  const people = usePeople();
   const theme = useTheme();
   const selectedMonth = useUiStore((s) => s.selectedMonth);
   const { data } = useOverview(selectedMonth);
@@ -84,7 +86,7 @@ export default function AccountsScreen() {
       />
       <Card style={{ gap: 0, paddingVertical: 4 }}>
         <ComputedRow
-          name={owed ? `${PEOPLE[owed.debtor]} owes ${PEOPLE[owed.creditor]}` : `${PEOPLE.adriana} and ${PEOPLE.sergio}`}
+          name={owed ? `${people[owed.debtor]} owes ${people[owed.creditor]}` : `${people.adriana} and ${people.sergio}`}
           hint={owed ? 'From shared expenses, all months · tap to settle up' : 'All square'}
           cents={data.owedCents}
           onPress={() => router.push('/balance')}

@@ -5,7 +5,6 @@ import { Alert, Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Button, Card, Chips, Field, Money, Screen, SectionLabel, ToggleRow } from '@/components/ui';
-import { PEOPLE } from '@/config';
 import { createCategory, listCategories, listCategoriesForMonth } from '@/db/repositories/categories';
 import { getBudgets, getMonth, getPreviousPlan, saveMonthPlan } from '@/db/repositories/months';
 import type { Category } from '@/db/types';
@@ -15,6 +14,7 @@ import { useDbQuery } from '@/hooks/use-db-query';
 import { loadOverview } from '@/hooks/use-overview';
 import { useTheme } from '@/hooks/use-theme';
 import { useUiStore } from '@/store/ui';
+import { usePeople } from '@/store/people';
 
 /**
  * One budget per category for the selected month, and what the month starts with: typed for
@@ -96,6 +96,7 @@ function PlanForm({
   expectedIncomeCents: number;
   copiedFrom: MonthKey | null;
 }) {
+  const people = usePeople();
   const db = useSQLiteContext();
   const theme = useTheme();
   // First month: typed. Later months: the saved amount, or the current balance when chosen.
@@ -228,7 +229,7 @@ function PlanForm({
           ) : null}
           <Button title="Edit accounts" variant="secondary" onPress={() => router.dismissTo('/accounts')} />
           <ThemedText type="small" themeColor="textSecondary">
-            This is all your accounts, plus or minus what you and {PEOPLE.adriana} owe each other,
+            This is all your accounts, plus or minus what you and {people.adriana} owe each other,
             minus planned expenses. If it looks wrong, an account balance is off: fix it in Accounts.
           </ThemedText>
         </Card>

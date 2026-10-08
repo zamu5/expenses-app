@@ -47,6 +47,7 @@ import {
   getSplitTotals,
   listSettlements,
 } from '../repositories/settlements';
+import { DEFAULT_PEOPLE_NAMES, getPeopleNames, setPeopleNames } from '../repositories/settings';
 import type { Db } from '../types';
 import { createTestDb } from './node-db';
 
@@ -828,5 +829,54 @@ describe('bank and investment accounts', () => {
     );
     await migrate(db);
     expect((await named('Old')).accountType).toBe('bank');
+  });
+});
+
+describe('the two names are a setting', () => {
+  it('start neutral on a new database and can be changed', async () => {
+    expect(await getPeopleNames(db)).toEqual(DEFAULT_PEOPLE_NAMES);
+    await setPeopleNames(db, { sergio: ' Ana ', adriana: 'Luis' });
+    expect(await getPeopleNames(db)).toEqual({ sergio: 'Ana', adriana: 'Luis' });
+    // An empty name goes back to the neutral one.
+    await setPeopleNames(db, { sergio: '', adriana: 'Luis' });
+    expect(await getPeopleNames(db)).toEqual({ sergio: DEFAULT_PEOPLE_NAMES.sergio, adriana: 'Luis' });
+  });
+
+  it('a database that already had data keeps the names it was shown with', async () => {
+    db = createTestDb();
+    await migrate(db, 10);
+    const fun = (await db.getFirstAsync<{ id: string }>("SELECT id FROM categories WHERE name = 'Fun'", []))!.id;
+    await db.runAsync(
+      `INSERT INTO expenses (id, category_id, amount_cents, spent_on, created_at, updated_at)
+       VALUES ('e1', ?, 100, '2026-10-01', 'x', 'x')`,
+      [fun],
+    );
+    await migrate(db);
+    expect(await getPeopleNames(db)).toEqual({ sergio: 'Sergio', adriana: 'Adriana' });
+  });
+
+  it('an upgrade of an empty database stays neutral', async () => {
+    db = createTestDb();
+    await migrate(db, 10);
+    await migrate(db);
+    expect(await getPeopleNames(db)).toEqual(DEFAULT_PEOPLE_NAMES);
+  });
+
+  it('travel with a backup, and an old backup leaves the names alone', async () => {
+    await setPeopleNames(db, { sergio: 'Ana', adriana: 'Luis' });
+    const parsed = parseBackup(JSON.stringify(await exportBackup(db)), LATEST_SCHEMA_VERSION);
+    if (!parsed.ok) throw new Error(parsed.error);
+    expect(parsed.backup.people).toEqual({ sergio: 'Ana', adriana: 'Luis' });
+
+    db = createTestDb();
+    await migrate(db);
+    await restoreBackup(db, parsed.backup);
+    expect(await getPeopleNames(db)).toEqual({ sergio: 'Ana', adriana: 'Luis' });
+
+    // A backup made before names were a setting has no names in it.
+    delete parsed.backup.people;
+    await setPeopleNames(db, { sergio: 'Kept', adriana: 'Also kept' });
+    await restoreBackup(db, parsed.backup);
+    expect(await getPeopleNames(db)).toEqual({ sergio: 'Kept', adriana: 'Also kept' });
   });
 });

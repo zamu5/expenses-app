@@ -19,7 +19,6 @@ import {
   StatusPill,
   useStatusColor,
 } from '@/components/ui';
-import { PEOPLE } from '@/config';
 import { listExpenses } from '@/db/repositories/expenses';
 import { listIncomes } from '@/db/repositories/incomes';
 import { setBudget } from '@/db/repositories/months';
@@ -30,9 +29,11 @@ import { useDbQuery } from '@/hooks/use-db-query';
 import { useMonthSummary } from '@/hooks/use-month-summary';
 import { useTheme } from '@/hooks/use-theme';
 import { useUiStore } from '@/store/ui';
+import { usePeople } from '@/store/people';
 
 /** One category in the selected month: how it is going, its budget, and its expenses. */
 export default function CategoryDetailScreen() {
+  const people = usePeople();
   const { id } = useLocalSearchParams<{ id: string }>();
   const month = useUiStore((s) => s.selectedMonth);
   const { data: view } = useMonthSummary(month);
@@ -80,7 +81,7 @@ export default function CategoryDetailScreen() {
                   <View style={{ flex: 1 }}>
                     <ThemedText>{formatDay(r.receivedOn)}</ThemedText>
                     <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
-                      Refund{r.forWhom === 'shared' ? ' · shared' : r.forWhom === 'adriana' ? ` · for ${PEOPLE.adriana}` : ''}
+                      Refund{r.forWhom === 'shared' ? ' · shared' : r.forWhom === 'adriana' ? ` · for ${people.adriana}` : ''}
                       {r.note ? ` · ${r.note}` : ''}
                     </ThemedText>
                   </View>
@@ -109,7 +110,7 @@ export default function CategoryDetailScreen() {
                 <View style={{ flex: 1 }}>
                   <ThemedText>{formatDay(e.spentOn)}</ThemedText>
                   <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
-                    {splitLabel(e)}
+                    {splitLabel(e, people)}
                     {e.note ? ` · ${e.note}` : ''}
                   </ThemedText>
                 </View>
@@ -134,6 +135,7 @@ export default function CategoryDetailScreen() {
 }
 
 function Overview({ category: c }: { category: CategorySummary }) {
+  const people = usePeople();
   const color = useStatusColor(c.status);
   const spent = Math.max(0, c.spentCents);
   const ratio = c.budgetCents > 0 ? spent / c.budgetCents : spent > 0 ? 1 : 0;
@@ -150,7 +152,7 @@ function Overview({ category: c }: { category: CategorySummary }) {
         <Stat label="Expected by month end" cents={c.projectedSpendCents} />
       </View>
       <ThemedText type="small" themeColor="textSecondary">
-        Counts your share only: half of shared expenses, none of what was only for {PEOPLE.adriana}.
+        Counts your share only: half of shared expenses, none of what was only for {people.adriana}.
         Refunds are taken off.
       </ThemedText>
       {c.pace !== null ? (

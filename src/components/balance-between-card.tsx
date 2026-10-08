@@ -6,10 +6,12 @@ import { ThemedText } from '@/components/themed-text';
 import { Card, Money } from '@/components/ui';
 import { useBalance } from '@/hooks/use-balance';
 import { useTheme } from '@/hooks/use-theme';
+import { usePeople } from '@/store/people';
 
 /** Who owes whom right now. Opens the Balance screen to see why and to settle up. */
 export function BalanceBetweenCard() {
   const theme = useTheme();
+  const people = usePeople();
   const { data } = useBalance();
   if (!data) return null;
 
@@ -24,7 +26,7 @@ export function BalanceBetweenCard() {
             Between you two
           </ThemedText>
           <ThemedText type="smallBold" style={{ fontSize: 16 }}>
-            {balanceSentence(data.balance)}
+            {balanceSentence(data.balance, people)}
           </ThemedText>
         </View>
         {data.balance ? (

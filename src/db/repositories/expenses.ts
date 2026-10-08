@@ -34,7 +34,7 @@ export interface ExpenseInput {
   amountCents: number;
   spentOn: string;
   note?: string | null;
-  /** Who paid. Defaults to Sergio. */
+  /** Who paid. Defaults to the budget owner. */
   paidBy?: Person;
   /** Who it was for: both 50/50, or one person only. Defaults to 'shared'. */
   forWhom?: ForWhom;

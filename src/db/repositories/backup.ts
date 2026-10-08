@@ -2,6 +2,7 @@ import { BACKUP_TABLES, buildBackup, type Backup, type BackupRow, type BackupTab
 import { nowISO } from '@/lib/id';
 
 import { notifyDataChanged } from '../events';
+import { getPeopleNames, setPeopleNames } from './settings';
 import type { Db } from '../types';
 
 const LAST_BACKUP_KEY = 'last_backup_at';
@@ -13,7 +14,7 @@ export async function exportBackup(db: Db): Promise<Backup> {
   for (const table of BACKUP_TABLES) {
     tables[table] = await db.getAllAsync<BackupRow>(`SELECT * FROM ${table}`, []);
   }
-  return buildBackup(tables, version?.user_version ?? 0, nowISO());
+  return buildBackup(tables, version?.user_version ?? 0, nowISO(), { ...(await getPeopleNames(db)) });
 }
 
 /**
@@ -43,6 +44,11 @@ export async function restoreBackup(db: Db, backup: Backup): Promise<void> {
       }
     }
   });
+  // The names travel with the data. A backup from before they were a setting has none, and the
+  // names on this device are then left as they are.
+  if (backup.people?.sergio && backup.people?.adriana) {
+    await setPeopleNames(db, { sergio: backup.people.sergio, adriana: backup.people.adriana });
+  }
   notifyDataChanged();
 }
 

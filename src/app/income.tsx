@@ -6,7 +6,7 @@ import { Alert, StyleSheet, View } from 'react-native';
 import { DateField } from '@/components/date-field';
 import { ThemedText } from '@/components/themed-text';
 import { Button, Chips, Field, Screen, SectionLabel } from '@/components/ui';
-import { CURRENCY, PEOPLE } from '@/config';
+import { CURRENCY } from '@/config';
 import { listAccounts } from '@/db/repositories/accounts';
 import { listCategories, listCategoriesForMonth } from '@/db/repositories/categories';
 import { addIncome, deleteIncome, getIncome, updateIncome } from '@/db/repositories/incomes';
@@ -18,6 +18,7 @@ import { useDbQuery } from '@/hooks/use-db-query';
 import { useTheme } from '@/hooks/use-theme';
 import { confirmDestructive } from '@/lib/confirm';
 import { useUiStore } from '@/store/ui';
+import { usePeople } from '@/store/people';
 
 /** Add money you received (salary, a refund), or edit it when opened with ?id=. */
 export default function IncomeScreen() {
@@ -56,6 +57,7 @@ function IncomeForm({
   accounts: Account[];
   categories: Category[];
 }) {
+  const people = usePeople();
   const db = useSQLiteContext();
   const theme = useTheme();
   const selectedMonth = useUiStore((s) => s.selectedMonth);
@@ -163,9 +165,9 @@ function IncomeForm({
           <SectionLabel>The refund is for</SectionLabel>
           <Chips
             options={[
-              { value: 'sergio', label: `Only ${PEOPLE.sergio}` },
+              { value: 'sergio', label: `Only ${people.sergio}` },
               { value: 'shared', label: 'Shared 50/50' },
-              { value: 'adriana', label: `Only ${PEOPLE.adriana}` },
+              { value: 'adriana', label: `Only ${people.adriana}` },
             ]}
             value={forWhom}
             onChange={setForWhom}

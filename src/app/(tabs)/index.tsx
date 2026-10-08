@@ -96,7 +96,7 @@ export default function MonthScreen() {
           </>
         ) : null}
 
-        <Button title="Backup and restore" variant="secondary" onPress={() => router.push('/settings')} />
+        <Button title="Settings and backup" variant="secondary" onPress={() => router.push('/settings')} />
       </Screen>
       <Fab label="Add expense" onPress={() => router.push('/expense')} />
     </ThemedView>

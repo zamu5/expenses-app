@@ -3,22 +3,25 @@ import { useState } from 'react';
 import { View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { Button, Card, Screen, SectionLabel } from '@/components/ui';
+import { Button, Card, Field, Screen, SectionLabel } from '@/components/ui';
 import { LATEST_SCHEMA_VERSION } from '@/db/migrations';
 import { exportBackup, getLastBackupAt, restoreBackup, setLastBackupAt } from '@/db/repositories/backup';
+import { setPeopleNames, type PeopleNames } from '@/db/repositories/settings';
 import { backupFileName, parseBackup, summarizeBackup, type Backup } from '@/domain/backup';
 import { todayISO } from '@/domain/dates';
 import { useDbQuery } from '@/hooks/use-db-query';
 import { useTheme } from '@/hooks/use-theme';
 import { pickBackupFile, saveBackupFile } from '@/lib/backup-file';
+import { usePeople } from '@/store/people';
 
 const formatWhen = (iso: string) =>
   new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(iso));
 
-/** Export all data to a file, and restore it from one. The data only lives on this device otherwise. */
+/** The two names, and exporting all data to a file or restoring it from one. */
 export default function SettingsScreen() {
   const db = useSQLiteContext();
   const theme = useTheme();
+  const people = usePeople();
   const { data: lastBackupAt } = useDbQuery(getLastBackupAt, []);
   const [message, setMessage] = useState<{ text: string; isError: boolean } | null>(null);
   // A picked backup waits here until the user confirms replacing everything.
@@ -78,6 +81,11 @@ export default function SettingsScreen() {
 
   return (
     <Screen>
+      <SectionLabel>People</SectionLabel>
+      {/* The key resets the fields when the saved names change, e.g. after restoring a backup. */}
+      <PeopleNamesEditor key={`${people.sergio}|${people.adriana}`} names={people} />
+
+      <SectionLabel>Backup</SectionLabel>
       <ThemedText type="small" themeColor="textSecondary">
         Your data is stored only on this device. A backup is one file with everything in it, which
         you can keep in iCloud Drive or anywhere else, and restore on this or another device.
@@ -127,5 +135,33 @@ export default function SettingsScreen() {
         </ThemedText>
       ) : null}
     </Screen>
+  );
+}
+
+/** The names shown for the two people. The first one is whose budget and accounts the app tracks. */
+function PeopleNamesEditor({ names }: { names: PeopleNames }) {
+  const db = useSQLiteContext();
+  const [first, setFirst] = useState(names.sergio);
+  const [second, setSecond] = useState(names.adriana);
+  const changed = first.trim() !== names.sergio || second.trim() !== names.adriana;
+  const valid = first.trim() !== '' && second.trim() !== '' && first.trim() !== second.trim();
+
+  return (
+    <View style={{ gap: 8 }}>
+      <Field label="Your name (the budget and accounts are yours)" value={first} onChangeText={setFirst} />
+      <Field label="The person you share expenses with" value={second} onChangeText={setSecond} />
+      {changed && !valid ? (
+        <ThemedText type="small" themeColor="textSecondary">
+          Both names are needed, and they must be different.
+        </ThemedText>
+      ) : null}
+      {changed ? (
+        <Button
+          title="Save names"
+          onPress={() => setPeopleNames(db, { sergio: first, adriana: second })}
+          disabled={!valid}
+        />
+      ) : null}
+    </View>
   );
 }

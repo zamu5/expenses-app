@@ -29,6 +29,8 @@ export interface Backup {
   /** ISO timestamp of the export. */
   exportedAt: string;
   tables: Record<BackupTable, BackupRow[]>;
+  /** The two display names, by person id. Missing in backups made before names were a setting. */
+  people?: Record<string, string>;
 }
 
 /** Tables that exist since schema version 1. Newer ones may be missing from an old backup. */
@@ -38,8 +40,11 @@ export function buildBackup(
   tables: Record<BackupTable, BackupRow[]>,
   schemaVersion: number,
   exportedAt: string,
+  people?: Record<string, string>,
 ): Backup {
-  return { app: BACKUP_APP, format: BACKUP_FORMAT, schemaVersion, exportedAt, tables };
+  const backup: Backup = { app: BACKUP_APP, format: BACKUP_FORMAT, schemaVersion, exportedAt, tables };
+  if (people) backup.people = people;
+  return backup;
 }
 
 /** 'expenses-backup-2026-10-07.json' */
@@ -100,9 +105,18 @@ export function parseBackup(text: string, appSchemaVersion: number): ParsedBacku
     tables[table] = rows;
   }
 
+  // Names are optional; anything that is not a plain name is ignored rather than refused.
+  let people: Record<string, string> | undefined;
+  if (typeof file.people === 'object' && file.people !== null) {
+    const entries = Object.entries(file.people).filter(
+      (entry): entry is [string, string] => typeof entry[1] === 'string' && entry[1].trim() !== '',
+    );
+    if (entries.length > 0) people = Object.fromEntries(entries);
+  }
+
   return {
     ok: true,
-    backup: buildBackup(tables, file.schemaVersion, file.exportedAt),
+    backup: buildBackup(tables, file.schemaVersion, file.exportedAt, people),
   };
 }
 

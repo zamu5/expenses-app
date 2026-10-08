@@ -8,7 +8,6 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { splitLabel } from '@/components/split-label';
 import { Card, Chips, EmptyState, Fab, Money, Screen, SectionLabel, Title } from '@/components/ui';
-import { PEOPLE } from '@/config';
 import { listCategories } from '@/db/repositories/categories';
 import { listExpenses } from '@/db/repositories/expenses';
 import { listIncomes } from '@/db/repositories/incomes';
@@ -18,10 +17,12 @@ import { matchesSplitFilter, type SplitFilter } from '@/domain/split';
 import { useDbQuery } from '@/hooks/use-db-query';
 import { useTheme } from '@/hooks/use-theme';
 import { useUiStore } from '@/store/ui';
+import { usePeople } from '@/store/people';
 
 const ALL = 'all';
 
 export default function ExpensesScreen() {
+  const people = usePeople();
   const theme = useTheme();
   const selectedMonth = useUiStore((s) => s.selectedMonth);
   const [filter, setFilter] = useState<string>(ALL);
@@ -47,12 +48,12 @@ export default function ExpensesScreen() {
   // What is filtered right now, shown next to "Filters" so it is visible while they are folded.
   const activeFilters = [
     filter === ALL ? null : (categoryName.get(filter) ?? null),
-    splitFilter.paidBy === 'all' ? null : `Paid by ${PEOPLE[splitFilter.paidBy]}`,
+    splitFilter.paidBy === 'all' ? null : `Paid by ${people[splitFilter.paidBy]}`,
     splitFilter.forWhom === 'all'
       ? null
       : splitFilter.forWhom === 'shared'
         ? 'Shared'
-        : `Only ${PEOPLE[splitFilter.forWhom]}`,
+        : `Only ${people[splitFilter.forWhom]}`,
   ].filter((label): label is string => label !== null);
   // The category filter is applied by the query; who paid / shared is applied here.
   const expenses = (data?.expenses ?? []).filter((e) => matchesSplitFilter(e, splitFilter));
@@ -107,8 +108,8 @@ export default function ExpensesScreen() {
             <Chips<SplitFilter['paidBy']>
               options={[
                 { value: 'all', label: 'All' },
-                { value: 'sergio', label: PEOPLE.sergio },
-                { value: 'adriana', label: PEOPLE.adriana },
+                { value: 'sergio', label: people.sergio },
+                { value: 'adriana', label: people.adriana },
               ]}
               value={splitFilter.paidBy}
               onChange={(paidBy) => setSplitFilter({ paidBy })}
@@ -118,8 +119,8 @@ export default function ExpensesScreen() {
               options={[
                 { value: 'all', label: 'All' },
                 { value: 'shared', label: 'Shared' },
-                { value: 'sergio', label: `Only ${PEOPLE.sergio}` },
-                { value: 'adriana', label: `Only ${PEOPLE.adriana}` },
+                { value: 'sergio', label: `Only ${people.sergio}` },
+                { value: 'adriana', label: `Only ${people.adriana}` },
               ]}
               value={splitFilter.forWhom}
               onChange={(forWhom) => setSplitFilter({ forWhom })}
@@ -195,7 +196,7 @@ export default function ExpensesScreen() {
                     <View style={{ flex: 1 }}>
                       <ThemedText>{categoryName.get(e.categoryId) ?? 'Unknown'}</ThemedText>
                       <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
-                        {splitLabel(e)}
+                        {splitLabel(e, people)}
                         {e.note ? ` · ${e.note}` : ''}
                       </ThemedText>
                     </View>

@@ -200,6 +200,27 @@ const migrations: ((db: Db) => Promise<void>)[] = [
         CHECK (account_type IN ('bank', 'investment'));
     `);
   },
+
+  // Version 11: the two names become a setting. Until now the app always showed these two, so a
+  // database that already holds data keeps them; a new one starts with neutral names.
+  async (db) => {
+    const used = await db.getFirstAsync<{ n: number }>(
+      'SELECT (SELECT COUNT(*) FROM expenses) + (SELECT COUNT(*) FROM months) AS n',
+      [],
+    );
+    if ((used?.n ?? 0) === 0) return;
+    const now = nowISO();
+    for (const [key, name] of [
+      ['person_name_sergio', 'Sergio'],
+      ['person_name_adriana', 'Adriana'],
+    ]) {
+      await db.runAsync('INSERT OR IGNORE INTO settings (key, value, updated_at) VALUES (?, ?, ?)', [
+        key,
+        name,
+        now,
+      ]);
+    }
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = migrations.length;

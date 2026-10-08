@@ -93,7 +93,8 @@ Budgets count only your share: half of a shared expense, all of one that was onl
 nothing of one that was only for the other person, whoever paid. A 83.34 shared expense in a 100
 budget leaves 58.33.
 
-The math is in `src/domain/split.ts`. The two names are `PEOPLE` in `src/config.ts`.
+The math is in `src/domain/split.ts`. The two names are set in the app, under **Settings and
+backup** on the Month tab; the first one is whose budget and accounts the app tracks.
 
 ## Income
 
