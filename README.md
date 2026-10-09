@@ -45,7 +45,7 @@ After changing dependencies in `package.json`, rebuild with fresh modules:
 
 | Command | What it does |
 | --- | --- |
-| `npm test` | Unit tests: budget math, money parsing, dates, and the database layer against real SQLite |
+| `npm test` | Unit tests: budget math, money parsing, dates, the database layer against real SQLite, and the backup server |
 | `npm run typecheck` | TypeScript type check (run `npx expo start` once first so Expo generates its type files) |
 | `npm run web` | Runs the app in a browser for quick checks; the iPhone is the real target |
 
@@ -152,6 +152,35 @@ iCloud Drive), on the web as a download.
 Restoring picks such a file, shows what is in it, and after you confirm replaces all the data in
 the app with it. If anything in the file cannot be restored, nothing is changed. The file format
 is in `src/domain/backup.ts`.
+
+### Automatic backup to a folder on the computer
+
+While the app is served by the dev server (Docker, or `npx expo start`), it also saves a backup by
+itself about two seconds after every change, always overwriting the same file in `backup/`:
+
+- the browser writes `backup/latest.json`
+- the phone writes `backup/latest-phone.json` (the browser and the phone hold separate data)
+
+These are ordinary backup files: restore one with **Restore from backup…**. Settings shows when
+the last automatic save happened, or why it failed. Nothing is saved when the app merely opens,
+only after a change. Before the first save of each day, the file from the day before is kept as
+`latest.YYYY-MM-DD.json`; the newest 7 of those are kept. `backup/` is not committed to git.
+
+An app cannot write to a folder on the Mac by itself, so the dev server does it
+(`server/backup-middleware.js`, wired up in `metro.config.js`). That means the phone only saves
+while it can reach the dev server on the Mac. Away from it, or in a standalone build, the
+automatic save does nothing and Settings says so; use **Export backup** there.
+
+What you can change:
+
+| Setting | Where | Default |
+| --- | --- | --- |
+| On or off, file names, delay, server address | `AUTO_BACKUP` in `src/config.ts` | on, names above, 2 s, the server the app was loaded from |
+| Folder on the computer | `BACKUP_DIR` environment variable when starting the server | `./backup` |
+| Dated daily copies to keep | `BACKUP_KEEP_DAYS` environment variable | 7 (0 for none) |
+
+For example `BACKUP_DIR=~/Documents/expenses-backup docker compose up -d`, or put the variables in
+a `.env` file next to `docker-compose.yml`.
 
 ## Changing the home currency
 

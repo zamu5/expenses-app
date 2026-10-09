@@ -1,12 +1,13 @@
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { SQLiteProvider } from 'expo-sqlite';
+import { SQLiteProvider, useSQLiteContext } from 'expo-sqlite';
 import { useEffect } from 'react';
 import { useColorScheme } from 'react-native';
 
 import { migrate } from '@/db/migrations';
 import { getPeopleNames } from '@/db/repositories/settings';
 import { useDbQuery } from '@/hooks/use-db-query';
+import { startAutoBackup } from '@/lib/auto-backup';
 import { usePeopleStore } from '@/store/people';
 
 SplashScreen.preventAutoHideAsync();
@@ -29,6 +30,13 @@ function PeopleLoader() {
   return null;
 }
 
+/** Sends a backup to the dev server after every change (see AUTO_BACKUP in src/config.ts). */
+function AutoBackup() {
+  const db = useSQLiteContext();
+  useEffect(() => startAutoBackup(db), [db]);
+  return null;
+}
+
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   return (
@@ -37,6 +45,7 @@ export default function RootLayout() {
       <SQLiteProvider databaseName="expenses.db" onInit={migrate}>
         <HideSplash />
         <PeopleLoader />
+        <AutoBackup />
         <Stack>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="category/[id]" options={{ title: '', headerBackTitle: 'Back' }} />
