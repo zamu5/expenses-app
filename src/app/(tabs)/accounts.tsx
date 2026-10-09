@@ -1,7 +1,5 @@
-import { useSQLiteContext } from 'expo-sqlite';
 import { router } from 'expo-router';
-import { useState } from 'react';
-import { Alert, Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -9,7 +7,6 @@ import {
   Button,
   Card,
   EmptyState,
-  Field,
   Money,
   Screen,
   SectionLabel,
@@ -17,9 +14,8 @@ import {
   Title,
 } from '@/components/ui';
 import { CURRENCY } from '@/config';
-import { setExchangeRate } from '@/db/repositories/accounts';
-import type { Account, ExchangeRate } from '@/db/types';
-import { formatDay, formatMonth, todayISO } from '@/domain/dates';
+import type { Account } from '@/db/types';
+import { formatDay, formatMonth } from '@/domain/dates';
 import { describeBalance } from '@/domain/split';
 import { useOverview } from '@/hooks/use-overview';
 import { useTheme } from '@/hooks/use-theme';
@@ -41,7 +37,6 @@ export default function AccountsScreen() {
   const withBalances = data.accounts;
   const accounts = withBalances.filter((a) => a.kind === 'account');
   const planned = withBalances.filter((a) => a.kind === 'planned');
-  const foreign = netWorth.currencies.filter((c) => c.currency !== CURRENCY);
   const owed = describeBalance(data.owedCents);
   const monthName = formatMonth(selectedMonth);
 
@@ -76,9 +71,11 @@ export default function AccountsScreen() {
               <View style={{ alignItems: 'flex-end' }}>
                 <Money cents={c.netCents} type="smallBold" currency={c.currency} />
                 {c.currency === CURRENCY ? null : c.netHomeCents === null ? (
-                  <ThemedText type="small" style={{ color: theme.warning }}>
-                    Not in the total: set its rate below
-                  </ThemedText>
+                  <Pressable accessibilityRole="button" hitSlop={8} onPress={() => router.push('/settings')}>
+                    <ThemedText type="small" style={{ color: theme.warning }}>
+                      Not in the total: set its rate in Settings
+                    </ThemedText>
+                  </Pressable>
                 ) : (
                   <Money cents={c.netHomeCents} type="small" color={theme.textSecondary} />
                 )}
@@ -129,17 +126,6 @@ export default function AccountsScreen() {
           variant="secondary"
           onPress={() => router.push({ pathname: '/account-edit', params: { kind: 'planned' } })}
         />
-
-        {foreign.length > 0 ? (
-          <>
-            <SectionLabel>Exchange rates</SectionLabel>
-            {foreign.map((c) => {
-              const rate = data.rates.find((r) => r.currency === c.currency);
-              // The key resets the field when the saved rate changes.
-              return <RateEditor key={`${c.currency}-${rate?.unitsPerHome}`} currency={c.currency} rate={rate} />;
-            })}
-          </>
-        ) : null}
       </Screen>
       <SettingsFab />
     </ThemedView>
@@ -229,40 +215,6 @@ function ComputedRow({
       </View>
       <Money cents={cents} color={cents < 0 ? theme.critical : undefined} />
     </Pressable>
-  );
-}
-
-/** "1 CAD = [2950] COP", typed by hand. */
-function RateEditor({ currency, rate }: { currency: string; rate?: ExchangeRate }) {
-  const db = useSQLiteContext();
-  const [text, setText] = useState(rate ? String(rate.unitsPerHome) : '');
-  const parsed = Number(text.trim().replace(',', '.'));
-  const valid = text.trim() !== '' && Number.isFinite(parsed) && parsed > 0;
-  const changed = valid && parsed !== rate?.unitsPerHome;
-
-  async function save() {
-    if (!valid) return;
-    try {
-      await setExchangeRate(db, { currency, unitsPerHome: parsed, setOn: todayISO() });
-    } catch (e) {
-      Alert.alert('Could not save', e instanceof Error ? e.message : String(e));
-    }
-  }
-
-  return (
-    <View style={{ gap: 8 }}>
-      <Field
-        label={`1 ${CURRENCY} = how many ${currency}?`}
-        value={text}
-        onChangeText={setText}
-        keyboardType="decimal-pad"
-        placeholder="0"
-      />
-      <ThemedText type="small" themeColor="textSecondary">
-        {rate ? `Rate set on ${formatDay(rate.setOn)}. Update it whenever you like.` : 'No rate yet.'}
-      </ThemedText>
-      {changed ? <Button title={`Save ${currency} rate`} onPress={save} /> : null}
-    </View>
   );
 }
 

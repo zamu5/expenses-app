@@ -3,12 +3,15 @@ import { useState } from 'react';
 import { View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
+import { CURRENCY } from '@/config';
 import { Button, Card, Field, Screen, SectionLabel } from '@/components/ui';
 import { LATEST_SCHEMA_VERSION } from '@/db/migrations';
 import { exportBackup, getLastBackupAt, restoreBackup, setLastBackupAt } from '@/db/repositories/backup';
+import { listAccounts, listExchangeRates, setExchangeRate } from '@/db/repositories/accounts';
 import { setPeopleNames, type PeopleNames } from '@/db/repositories/settings';
+import type { ExchangeRate } from '@/db/types';
 import { backupFileName, parseBackup, summarizeBackup, type Backup } from '@/domain/backup';
-import { todayISO } from '@/domain/dates';
+import { formatDay, todayISO } from '@/domain/dates';
 import { useDbQuery } from '@/hooks/use-db-query';
 import { useTheme } from '@/hooks/use-theme';
 import { pickBackupFile, saveBackupFile } from '@/lib/backup-file';
@@ -17,12 +20,20 @@ import { usePeople } from '@/store/people';
 const formatWhen = (iso: string) =>
   new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(iso));
 
-/** The two names, and exporting all data to a file or restoring it from one. */
+/** The two names, the exchange rates, and exporting all data to a file or restoring it from one. */
 export default function SettingsScreen() {
   const db = useSQLiteContext();
   const theme = useTheme();
   const people = usePeople();
   const { data: lastBackupAt } = useDbQuery(getLastBackupAt, []);
+  // One rate per currency that an account or planned expense uses, other than the home currency.
+  const { data: rates } = useDbQuery(
+    async (db) => ({ accounts: await listAccounts(db), rates: await listExchangeRates(db) }),
+    [],
+  );
+  const foreignCurrencies = [
+    ...new Set((rates?.accounts ?? []).map((a) => a.currency).filter((c) => c !== CURRENCY)),
+  ].sort();
   const [message, setMessage] = useState<{ text: string; isError: boolean } | null>(null);
   // A picked backup waits here until the user confirms replacing everything.
   const [pending, setPending] = useState<Backup | null>(null);
@@ -84,6 +95,20 @@ export default function SettingsScreen() {
       <SectionLabel>People</SectionLabel>
       {/* The key resets the fields when the saved names change, e.g. after restoring a backup. */}
       <PeopleNamesEditor key={`${people.sergio}|${people.adriana}`} names={people} />
+
+      <SectionLabel>Exchange rates</SectionLabel>
+      {foreignCurrencies.length === 0 ? (
+        <ThemedText type="small" themeColor="textSecondary">
+          None needed: all your accounts are in {CURRENCY}. A rate appears here when you add an account
+          in another currency.
+        </ThemedText>
+      ) : (
+        foreignCurrencies.map((currency) => {
+          const rate = rates?.rates.find((r) => r.currency === currency);
+          // The key resets the field when the saved rate changes.
+          return <RateEditor key={`${currency}-${rate?.unitsPerHome}`} currency={currency} rate={rate} />;
+        })
+      )}
 
       <SectionLabel>Backup</SectionLabel>
       <ThemedText type="small" themeColor="textSecondary">
@@ -162,6 +187,46 @@ function PeopleNamesEditor({ names }: { names: PeopleNames }) {
           disabled={!valid}
         />
       ) : null}
+    </View>
+  );
+}
+
+/** "1 CAD = [2950] COP", typed by hand. */
+function RateEditor({ currency, rate }: { currency: string; rate?: ExchangeRate }) {
+  const db = useSQLiteContext();
+  const [text, setText] = useState(rate ? String(rate.unitsPerHome) : '');
+  const [error, setError] = useState<string | null>(null);
+  const parsed = Number(text.trim().replace(',', '.'));
+  const valid = text.trim() !== '' && Number.isFinite(parsed) && parsed > 0;
+  const changed = valid && parsed !== rate?.unitsPerHome;
+
+  async function save() {
+    if (!valid) return;
+    try {
+      await setExchangeRate(db, { currency, unitsPerHome: parsed, setOn: todayISO() });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  return (
+    <View style={{ gap: 8 }}>
+      <Field
+        label={`1 ${CURRENCY} = how many ${currency}?`}
+        value={text}
+        onChangeText={setText}
+        keyboardType="decimal-pad"
+        placeholder="0"
+      />
+      <ThemedText type="small" themeColor="textSecondary">
+        {rate ? `Rate set on ${formatDay(rate.setOn)}. Update it whenever you like.` : 'No rate yet.'}
+      </ThemedText>
+      {error ? (
+        <ThemedText type="small" themeColor="textSecondary">
+          Could not save: {error}
+        </ThemedText>
+      ) : null}
+      {changed ? <Button title={`Save ${currency} rate`} onPress={save} /> : null}
     </View>
   );
 }

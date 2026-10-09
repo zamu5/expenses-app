@@ -128,7 +128,8 @@ The Accounts tab shows everything in one place: each account in its own currency
 are planning for but have not put in a month (counted as negative), and a total in your home
 currency. Nothing is predefined; you add, rename and delete accounts yourself.
 
-- Every balance is typed in by hand, and so are exchange rates ("1 CAD = how many COP?").
+- Every balance is typed in by hand. Exchange rates ("1 CAD = how many COP?") are typed in
+  **Settings and backup**.
   A currency without a rate is shown but left out of the total. Logging an expense does not move
   any account: update the balance when it changes.
 - Two rows are worked out by the app: what the two of you owe each other, and **Left to spend**
