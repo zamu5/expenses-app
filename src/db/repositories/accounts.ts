@@ -60,7 +60,7 @@ export interface AccountInput {
   balanceCents: number;
   /** Pre-select this account when logging an income. Turning it on turns it off elsewhere. */
   isIncomeDefault?: boolean;
-  /** Makes it a credit card paid from that account. Its balance should then be negative. */
+  /** Makes it a credit card paid from that account. Its balance is negative while money is owed on it. */
   linkedAccountId?: string | null;
   /** Pre-select it as "Paid with" on new expenses. Turning it on turns it off elsewhere. */
   isPaymentDefault?: boolean;

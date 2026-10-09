@@ -81,7 +81,11 @@ function PayCardForm({
       ) : null}
 
       <Card style={{ gap: 12 }}>
-        <Row label={`You owe on ${card.name}`} cents={owedCents} />
+        {card.balanceCents > 0 ? (
+          <Row label={`${card.name} has in your favour`} cents={card.balanceCents} />
+        ) : (
+          <Row label={`You owe on ${card.name}`} cents={owedCents} />
+        )}
         <Row label={`In ${bank?.name ?? 'the linked account'}`} cents={bank?.balanceCents ?? 0} />
       </Card>
 

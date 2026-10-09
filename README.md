@@ -117,7 +117,8 @@ for income, so it is pre-selected.
 ### Credit cards and what an expense was paid with
 
 An account can be marked as a **credit card** paid from one of your bank accounts. Its balance is
-what you owe, shown as negative. An expense you paid yourself has **Paid with**: the account or
+what you owe, shown as negative; when the card is in your favour instead (you overpaid it, or got
+a refund), pick **It is in my favour** and it counts as positive. An expense you paid yourself has **Paid with**: the account or
 card chosen goes down by the full amount, and follows the expense if it is edited or deleted.
 Paying the card (on the card's own screen) moves money from the linked account to the card and is
 not an expense. One account or card can be the default payment method.

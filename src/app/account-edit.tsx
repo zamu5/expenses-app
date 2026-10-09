@@ -88,7 +88,8 @@ function AccountForm({
   const [name, setName] = useState(account?.name ?? '');
   const [currencyText, setCurrencyText] = useState(account?.currency ?? CURRENCY);
   // A credit card is an account linked to the bank account it is paid from. What is owed on it
-  // is typed as a positive amount and stored as a negative balance.
+  // is typed as a positive amount and stored as a negative balance. When the card is in your
+  // favour (you paid more than you owed, or got a refund) the balance is stored as positive.
   const [linkedAccountId, setLinkedAccountId] = useState<string | null>(account?.linkedAccountId ?? null);
   const [isCardOn, setIsCardOn] = useState(account ? account.linkedAccountId !== null : false);
   const [accountType, setAccountType] = useState<AccountType>(account?.accountType ?? 'bank');
@@ -97,14 +98,18 @@ function AccountForm({
   const [balanceText, setBalanceText] = useState(
     account ? centsToInputText(Math.abs(account.balanceCents)) : '',
   );
+  const [cardSide, setCardSide] = useState<'owed' | 'favour'>(
+    account && account.linkedAccountId !== null && account.balanceCents > 0 ? 'favour' : 'owed',
+  );
   const [isPaymentDefault, setIsPaymentDefault] = useState(account?.isPaymentDefault ?? false);
   const [isIncomeDefault, setIsIncomeDefault] = useState(account?.isIncomeDefault ?? false);
 
   const currency = parseCurrencyCode(currencyText);
   const typedCents = balanceText.trim() === '' ? 0 : parseAmountToCents(balanceText);
-  // An existing account keeps its sign unless it is (or becomes) a card, which is always owed.
+  // An existing account keeps its sign unless it is (or becomes) a card, which says which side it is on.
   const wasNegative = !isCard && account !== null && account.linkedAccountId === null && account.balanceCents < 0;
-  const balanceCents = typedCents === null ? null : isCard || wasNegative ? -typedCents || 0 : typedCents;
+  const isOwed = isCard ? cardSide === 'owed' : wasNegative;
+  const balanceCents = typedCents === null ? null : isOwed ? -typedCents || 0 : typedCents;
   const linked = isCard ? banks.find((b) => b.id === linkedAccountId) : undefined;
   const canSave =
     name.trim() !== '' && currency !== null && balanceCents !== null && (!isCard || linked !== undefined);
@@ -166,7 +171,11 @@ function AccountForm({
       {/* Paying the card has its own screen; this is the way in from the card itself. */}
       {account && account.linkedAccountId ? (
         <Button
-          title={`Pay this card (you owe ${centsToInputText(Math.abs(account.balanceCents))})`}
+          title={
+            account.balanceCents < 0
+              ? `Pay this card (you owe ${centsToInputText(-account.balanceCents)})`
+              : 'Pay this card'
+          }
           onPress={() => router.push({ pathname: '/pay-card', params: { id: account.id } })}
         />
       ) : null}
@@ -243,9 +252,28 @@ function AccountForm({
         </ThemedText>
       ) : null}
 
+      {isCard ? (
+        <>
+          <SectionLabel>Balance on the card</SectionLabel>
+          <Chips<'owed' | 'favour'>
+            options={[
+              { value: 'owed', label: 'I owe it' },
+              { value: 'favour', label: 'It is in my favour' },
+            ]}
+            value={cardSide}
+            onChange={setCardSide}
+          />
+        </>
+      ) : null}
       <Field
         label={
-          isPlanned ? 'How much you expect to spend' : isCard ? 'What you owe on it now' : 'Current balance'
+          isPlanned
+            ? 'How much you expect to spend'
+            : !isCard
+              ? 'Current balance'
+              : cardSide === 'owed'
+                ? 'What you owe on it now'
+                : 'What the card has in your favour'
         }
         value={balanceText}
         onChangeText={setBalanceText}
