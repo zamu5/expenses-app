@@ -6,8 +6,12 @@ services:
     environment:
       # Set to this machine's LAN IP to open the app from a phone (see README).
       REACT_NATIVE_PACKAGER_HOSTNAME: ${REACT_NATIVE_PACKAGER_HOSTNAME:-localhost}
+      # How many dated daily copies of the automatic backup to keep (0 for none).
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-7}
     volumes:
       - .:/app
+      # Where the automatic backup is written on this machine. Set BACKUP_DIR to use another folder.
+      - ${BACKUP_DIR:-./backup}:/app/backup
       # Keep the Linux node_modules from the image instead of the host's macOS ones.
       - node_modules:/app/node_modules
     stdin_open: true

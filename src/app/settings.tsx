@@ -15,16 +15,31 @@ import { formatDay, todayISO } from '@/domain/dates';
 import { useDbQuery } from '@/hooks/use-db-query';
 import { useTheme } from '@/hooks/use-theme';
 import { pickBackupFile, saveBackupFile } from '@/lib/backup-file';
+import { useAutoBackupStore, type AutoBackupStatus } from '@/store/auto-backup';
 import { usePeople } from '@/store/people';
 
 const formatWhen = (iso: string) =>
   new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(iso));
+
+function describeAutoBackup(status: AutoBackupStatus): string {
+  switch (status.state) {
+    case 'off':
+      return 'Off: there is no computer to save to from here.';
+    case 'waiting':
+      return 'On. It saves after your next change.';
+    case 'saved':
+      return `Saved to ${status.file} on ${formatWhen(status.at)}`;
+    case 'failed':
+      return `Could not save on ${formatWhen(status.at)}: ${status.error}`;
+  }
+}
 
 /** The two names, the exchange rates, and exporting all data to a file or restoring it from one. */
 export default function SettingsScreen() {
   const db = useSQLiteContext();
   const theme = useTheme();
   const people = usePeople();
+  const autoBackup = useAutoBackupStore((s) => s.status);
   const { data: lastBackupAt } = useDbQuery(getLastBackupAt, []);
   // One rate per currency that an account or planned expense uses, other than the home currency.
   const { data: rates } = useDbQuery(
@@ -115,6 +130,15 @@ export default function SettingsScreen() {
         Your data is stored only on this device. A backup is one file with everything in it, which
         you can keep in iCloud Drive or anywhere else, and restore on this or another device.
       </ThemedText>
+
+      <Card>
+        <ThemedText type="small" themeColor="textSecondary">
+          Automatic backup to the computer
+        </ThemedText>
+        <ThemedText type="smallBold" style={autoBackup.state === 'failed' ? { color: theme.critical } : undefined}>
+          {describeAutoBackup(autoBackup)}
+        </ThemedText>
+      </Card>
 
       <SectionLabel>Back up</SectionLabel>
       <Card>
