@@ -27,7 +27,10 @@ export interface Category {
 export interface Month {
   id: string;
   monthKey: string;
-  /** No longer used: what a month starts with now comes from the accounts. Kept for old data. */
+  /**
+   * What the month started with. Typed by hand for the first month; for later months it is the
+   * current balance at the time the month was planned.
+   */
   startingBalanceCents: number;
   /** Income the plan expects this month, e.g. the salary. 0 when none was set. */
   expectedIncomeCents: number;
@@ -43,6 +46,8 @@ export interface Expense {
   forWhom: ForWhom;
   /** The account or credit card it was paid with, whose balance it lowered. Null when not tracked. */
   paymentAccountId: string | null;
+  /** For a shared expense: the budget owner's share in percent, fixed when it was logged. */
+  ownerSharePct: number;
 }
 
 /** Money received: a salary, a refund. It raises the month's balance; it is not a negative expense. */
@@ -56,10 +61,12 @@ export interface Income {
    * category's spending and is not counted as income.
    */
   categoryId: string | null;
-  /** For a refund: whose spending it gives back. Shared means half of it belongs to the other person. */
+  /** For a refund: whose spending it gives back. Shared means part of it belongs to the other person. */
   forWhom: ForWhom;
   /** The account the money went into, whose balance it was added to. Null when none was picked. */
   accountId: string | null;
+  /** For a shared refund: the budget owner's share in percent, fixed when it was logged. */
+  ownerSharePct: number;
 }
 
 export type AccountKind = 'account' | 'planned';
@@ -79,8 +86,6 @@ export interface Account {
   /** ISO 4217 code, e.g. 'CAD' or 'COP'. */
   currency: string;
   balanceCents: number;
-  /** Whether this account counts toward "Started with" on the Month tab. Planned expenses always subtract. */
-  includeInStart: boolean;
   /** The account pre-selected when logging an income. At most one. */
   isIncomeDefault: boolean;
   /**

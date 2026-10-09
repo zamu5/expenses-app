@@ -5,6 +5,9 @@ import { useEffect } from 'react';
 import { useColorScheme } from 'react-native';
 
 import { migrate } from '@/db/migrations';
+import { getPeopleNames } from '@/db/repositories/settings';
+import { useDbQuery } from '@/hooks/use-db-query';
+import { usePeopleStore } from '@/store/people';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -16,6 +19,16 @@ function HideSplash() {
   return null;
 }
 
+/** Keeps the two display names in the store in step with the database. */
+function PeopleLoader() {
+  const { data } = useDbQuery(getPeopleNames, []);
+  const setNames = usePeopleStore((s) => s.setNames);
+  useEffect(() => {
+    if (data) setNames(data);
+  }, [data, setNames]);
+  return null;
+}
+
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   return (
@@ -23,6 +36,7 @@ export default function RootLayout() {
       {/* Opens expenses.db on the phone and runs pending migrations before anything renders. */}
       <SQLiteProvider databaseName="expenses.db" onInit={migrate}>
         <HideSplash />
+        <PeopleLoader />
         <Stack>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="category/[id]" options={{ title: '', headerBackTitle: 'Back' }} />
@@ -34,7 +48,7 @@ export default function RootLayout() {
           <Stack.Screen name="categories" options={{ presentation: 'modal', title: 'Categories' }} />
           <Stack.Screen name="category-edit" options={{ presentation: 'modal', title: 'Category' }} />
           <Stack.Screen name="balance" options={{ presentation: 'modal', title: 'Balance' }} />
-          <Stack.Screen name="settings" options={{ presentation: 'modal', title: 'Backup' }} />
+          <Stack.Screen name="settings" options={{ presentation: 'modal', title: 'Settings' }} />
         </Stack>
       </SQLiteProvider>
     </ThemeProvider>

@@ -5,7 +5,6 @@ import { Alert, Pressable, StyleSheet, View } from 'react-native';
 import { balanceSentence } from '@/components/split-label';
 import { ThemedText } from '@/components/themed-text';
 import { Button, Card, Chips, EmptyState, Field, Money, Screen, SectionLabel } from '@/components/ui';
-import { PEOPLE } from '@/config';
 import { listDebtExpenses } from '@/db/repositories/expenses';
 import { addSettlement, deleteSettlement, listSettlements } from '@/db/repositories/settlements';
 import { formatDay, todayISO } from '@/domain/dates';
@@ -20,9 +19,11 @@ import {
 import { useBalance } from '@/hooks/use-balance';
 import { useDbQuery } from '@/hooks/use-db-query';
 import { useTheme } from '@/hooks/use-theme';
+import { usePeople } from '@/store/people';
 
 /** Who owes whom across every month, where that number comes from, and paying it back. */
 export default function BalanceScreen() {
+  const people = usePeople();
   const theme = useTheme();
   const db = useSQLiteContext();
   const { data } = useBalance();
@@ -36,11 +37,11 @@ export default function BalanceScreen() {
     <Screen>
       <Card style={{ alignItems: 'center', paddingVertical: 20 }}>
         <ThemedText type="small" themeColor="textSecondary">
-          {balanceSentence(balance)}
+          {balanceSentence(balance, people)}
         </ThemedText>
         <Money cents={balance?.amountCents ?? 0} type="subtitle" />
         <ThemedText type="small" themeColor="textSecondary" style={{ textAlign: 'center' }}>
-          Running total of every month. Shared expenses are split 50/50.
+          Running total of every month. Each line is the part owed, not the full expense.
         </ThemedText>
       </Card>
 
@@ -55,7 +56,7 @@ export default function BalanceScreen() {
           <View key={debtor} style={{ gap: 6 }}>
             <View style={styles.between}>
               <SectionLabel>
-                {PEOPLE[debtor]} owes {PEOPLE[otherPerson(debtor)]} for
+                {people[debtor]} owes {people[otherPerson(debtor)]} for
               </SectionLabel>
               <Money
                 cents={items.reduce((sum, i) => sum + i.cents, 0)}
@@ -74,7 +75,10 @@ export default function BalanceScreen() {
                   <View style={{ flex: 1 }}>
                     <ThemedText numberOfLines={1}>{e.note ?? e.categoryName}</ThemedText>
                     <ThemedText type="small" themeColor="textSecondary">
-                      {formatDay(e.spentOn)} · {e.forWhom === 'shared' ? 'half of shared' : 'paid in full'}
+                      {formatDay(e.spentOn)} ·{' '}
+                      {e.forWhom === 'shared'
+                        ? `${debtor === BUDGET_OWNER ? e.ownerSharePct : 100 - e.ownerSharePct}% of shared`
+                        : 'paid in full'}
                     </ThemedText>
                   </View>
                   <Money cents={cents} />
@@ -114,7 +118,7 @@ export default function BalanceScreen() {
               ]}>
               <View style={{ flex: 1 }}>
                 <ThemedText>
-                  {PEOPLE[s.fromPerson]} paid {PEOPLE[s.toPerson]}
+                  {people[s.fromPerson]} paid {people[s.toPerson]}
                 </ThemedText>
                 <ThemedText type="small" themeColor="textSecondary">
                   {formatDay(s.settledOn)}
@@ -137,7 +141,8 @@ export default function BalanceScreen() {
 }
 
 function Breakdown({ totals, person }: { totals: SplitTotals; person: Person }) {
-  const other = PEOPLE[otherPerson(person)];
+  const people = usePeople();
+  const other = people[otherPerson(person)];
   const line = (label: string, cents: number) => (
     <View style={styles.between}>
       <ThemedText type="small" themeColor="textSecondary">
@@ -148,7 +153,7 @@ function Breakdown({ totals, person }: { totals: SplitTotals; person: Person }) 
   );
   return (
     <View style={{ gap: 4 }}>
-      <ThemedText type="smallBold">{PEOPLE[person]} paid</ThemedText>
+      <ThemedText type="smallBold">{people[person]} paid</ThemedText>
       {line('Shared expenses', totals.sharedPaidBy[person])}
       {line(`Expenses only for ${other}`, totals.paidForOtherBy[person])}
       {line(`Paid back to ${other}`, totals.settledBy[person])}
@@ -160,6 +165,7 @@ function Breakdown({ totals, person }: { totals: SplitTotals; person: Person }) 
 }
 
 function SettleUp({ debtor, owedCents }: { debtor: Person; owedCents: number }) {
+  const people = usePeople();
   const db = useSQLiteContext();
   const [fromPerson, setFromPerson] = useState<Person>(debtor);
   const [text, setText] = useState(owedCents > 0 ? centsToInputText(owedCents) : '');
@@ -181,7 +187,7 @@ function SettleUp({ debtor, owedCents }: { debtor: Person; owedCents: number }) 
       <Chips
         options={(['sergio', 'adriana'] as const).map((p) => ({
           value: p,
-          label: `${PEOPLE[p]} pays ${PEOPLE[otherPerson(p)]}`,
+          label: `${people[p]} pays ${people[otherPerson(p)]}`,
         }))}
         value={fromPerson}
         onChange={setFromPerson}

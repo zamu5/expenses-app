@@ -19,6 +19,9 @@ export const Colors = {
     good: '#1F9D55',
     warning: '#C27803',
     critical: '#D93025',
+    // The two sides of the split bar on the expense form.
+    splitOwner: '#0A84FF',
+    splitOther: '#FF9F0A',
   },
   dark: {
     text: '#ffffff',
@@ -31,6 +34,8 @@ export const Colors = {
     good: '#3DD68C',
     warning: '#F5B841',
     critical: '#FF6369',
+    splitOwner: '#0A84FF',
+    splitOther: '#FF9F0A',
   },
 } as const;
 

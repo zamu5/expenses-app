@@ -1,5 +1,5 @@
 import type { MonthKey } from '@/domain/dates';
-import type { ForWhom } from '@/domain/split';
+import { DEFAULT_OWNER_SHARE_PCT, type ForWhom } from '@/domain/split';
 import { newId, nowISO } from '@/lib/id';
 
 import { notifyDataChanged } from '../events';
@@ -13,6 +13,7 @@ interface IncomeRow {
   category_id: string | null;
   for_whom: ForWhom;
   account_id: string | null;
+  owner_share_pct: number;
 }
 
 const toIncome = (r: IncomeRow): Income => ({
@@ -23,9 +24,10 @@ const toIncome = (r: IncomeRow): Income => ({
   categoryId: r.category_id,
   forWhom: r.for_whom,
   accountId: r.account_id,
+  ownerSharePct: r.owner_share_pct,
 });
 
-const COLUMNS = 'id, amount_cents, received_on, note, category_id, for_whom, account_id';
+const COLUMNS = 'id, amount_cents, received_on, note, category_id, for_whom, account_id, owner_share_pct';
 
 export interface IncomeInput {
   amountCents: number;
@@ -37,6 +39,8 @@ export interface IncomeInput {
   forWhom?: ForWhom;
   /** The account the money went into. Its balance goes up by the amount. */
   accountId?: string | null;
+  /** The owner's share of a shared refund, 0-100. Left out: half and half, or what it had. */
+  ownerSharePct?: number;
 }
 
 const cleanNote = (note?: string | null) => (note?.trim() ? note.trim() : null);
@@ -57,8 +61,9 @@ export async function addIncome(db: Db, input: IncomeInput): Promise<string> {
   await db.withTransactionAsync(async () => {
     await db.runAsync(
       `INSERT INTO incomes
-         (id, amount_cents, received_on, note, category_id, for_whom, account_id, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (id, amount_cents, received_on, note, category_id, for_whom, account_id, owner_share_pct,
+          created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         input.amountCents,
@@ -67,6 +72,7 @@ export async function addIncome(db: Db, input: IncomeInput): Promise<string> {
         input.categoryId ?? null,
         input.forWhom ?? 'sergio',
         input.accountId ?? null,
+        input.ownerSharePct ?? DEFAULT_OWNER_SHARE_PCT,
         now,
         now,
       ],
@@ -85,7 +91,7 @@ export async function updateIncome(db: Db, id: string, input: IncomeInput): Prom
     if (!before) throw new Error('This income no longer exists');
     await db.runAsync(
       `UPDATE incomes SET amount_cents = ?, received_on = ?, note = ?, category_id = ?, for_whom = ?,
-         account_id = ?, updated_at = ?
+         account_id = ?, owner_share_pct = COALESCE(?, owner_share_pct), updated_at = ?
        WHERE id = ?`,
       [
         input.amountCents,
@@ -94,6 +100,7 @@ export async function updateIncome(db: Db, id: string, input: IncomeInput): Prom
         input.categoryId ?? null,
         input.forWhom ?? 'sergio',
         input.accountId ?? null,
+        input.ownerSharePct ?? null,
         now,
         id,
       ],

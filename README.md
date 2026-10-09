@@ -86,14 +86,17 @@ category in the plan takes it out of that month only.
 
 ## Who paid, and who owes whom
 
-Every expense records who paid and who it was for: shared 50/50, or only one of you. From that the
+Every expense records who paid and who it was for: shared, or only one of you. A shared expense
+is half and half unless you choose another split on the expense form (shown while "For" is
+shared); each expense keeps the split it was logged with. From that the
 app keeps a running balance across all months ("Adriana owes Sergio $40"), shown at the top of the
 Month tab. Tap it to see where the number comes from and to record a payment that settles it.
-Budgets count only your share: half of a shared expense, all of one that was only for you, and
+Budgets count only your share: your part of a shared expense, all of one that was only for you, and
 nothing of one that was only for the other person, whoever paid. A 83.34 shared expense in a 100
 budget leaves 58.33.
 
-The math is in `src/domain/split.ts`. The two names are `PEOPLE` in `src/config.ts`.
+The math is in `src/domain/split.ts`. The two names are set in the app, under **Settings and
+backup** (the round button at the bottom left); the first one is whose budget and accounts the app tracks.
 
 ## Income
 
@@ -109,8 +112,7 @@ can be shared or for one person, like an expense.
 
 Every income or refund can also go **into an account**: the amount is added to that account's
 balance (and taken back out if you edit or delete it). One account can be marked as the default
-for income, so it is pre-selected. "Started with" leaves this month's deposits out, so income is
-not counted twice.
+for income, so it is pre-selected.
 
 ### Credit cards and what an expense was paid with
 
@@ -126,21 +128,24 @@ The Accounts tab shows everything in one place: each account in its own currency
 are planning for but have not put in a month (counted as negative), and a total in your home
 currency. Nothing is predefined; you add, rename and delete accounts yourself.
 
-- Every balance is typed in by hand, and so are exchange rates ("1 CAD = how many COP?").
+- Every balance is typed in by hand. Exchange rates ("1 CAD = how many COP?") are typed in
+  **Settings and backup**.
   A currency without a rate is shown but left out of the total. Logging an expense does not move
   any account: update the balance when it changes.
 - Two rows are worked out by the app: what the two of you owe each other, and **Left to spend**
   (the month's budget not spent yet, counted as negative).
 - The total of this tab is the **Current balance** on the Month tab.
-- **Started with** on the Month tab is every account with **Include in starting balance** switched
-  on, minus planned expenses. Nothing is typed for the month itself.
+- **Started with** on the Month tab is saved with the month's plan. You type it for your first
+  month. For every month after that the plan shows your current balance (accounts, plus or minus
+  what the two of you owe each other, minus planned expenses) and saves it when you save the plan.
+  If that number looks wrong, an account balance is off: fix it in Accounts.
 
 The math is in `src/domain/accounts.ts`.
 
 ## Backup and restore
 
 The data lives only on the device (or, on the web, in that browser for that exact address), so
-make backups. **Backup and restore** at the bottom of the Month tab exports everything to one file,
+make backups. The round settings button at the bottom left of the main tabs opens **Settings and backup**, which exports everything to one file,
 `expenses-backup-YYYY-MM-DD.json`: on the iPhone through the share sheet (save it to Files or
 iCloud Drive), on the web as a download.
 

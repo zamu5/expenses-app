@@ -14,7 +14,7 @@ export interface CategoryInput {
   /** Fixed costs (rent, subscriptions) are paid once, so their pace is meaningless. */
   isFixed: boolean;
   budgetCents: Cents;
-  /** The budget owner's share of the spending: shared expenses count half (see domain/split.ts). */
+  /** The budget owner's share of the spending: their part of shared expenses (see domain/split.ts). */
   spentCents: Cents;
 }
 

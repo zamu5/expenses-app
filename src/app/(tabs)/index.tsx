@@ -15,6 +15,7 @@ import {
   ProgressBar,
   Screen,
   SectionLabel,
+  SettingsFab,
   StatusPill,
   Title,
   useStatusColor,
@@ -60,7 +61,7 @@ export default function MonthScreen() {
           <>
             <EmptyState
               title={`Plan ${formatMonth(selectedMonth)}`}
-              body="Set a budget for each category. What you start with comes from your accounts."
+              body="Set what you start the month with and a budget for each category."
             />
             <Button title="Plan this month" onPress={() => router.push('/plan')} />
           </>
@@ -69,11 +70,12 @@ export default function MonthScreen() {
         {data?.month ? (
           <>
             <BalanceCard
-              startingCents={overview?.startedWithCents ?? 0}
+              startingCents={data.month.startingBalanceCents}
               incomeCents={data.summary.totalIncomeCents}
               currentCents={overview?.netWorth.totalHomeCents ?? 0}
               missingRates={overview?.netWorth.missingRates ?? []}
               plannedCents={data.summary.plannedEndCents}
+              leftToSpendCents={overview?.leftToSpendCents ?? 0}
               status={data.summary.status}
               statusReason={explainMonthStatus(data.summary, (cents) => formatCents(cents, CURRENCY))}
               daysElapsed={data.daysElapsed}
@@ -95,16 +97,15 @@ export default function MonthScreen() {
             <Button title="Edit plan" variant="secondary" onPress={() => router.push('/plan')} />
           </>
         ) : null}
-
-        <Button title="Backup and restore" variant="secondary" onPress={() => router.push('/settings')} />
       </Screen>
+      <SettingsFab />
       <Fab label="Add expense" onPress={() => router.push('/expense')} />
     </ThemedView>
   );
 }
 
 function BalanceCard(props: {
-  /** Accounts marked "include in starting balance", minus planned expenses. */
+  /** Saved with the month's plan: typed for the first month, the current balance after that. */
   startingCents: number;
   incomeCents: number;
   /** The Accounts tab total: every account, what is owed, minus planned expenses and what is left to spend. */
@@ -112,6 +113,8 @@ function BalanceCard(props: {
   missingRates: string[];
   /** Money in the account you pay from: start + income - what you paid, with payments between you two. */
   plannedCents: number;
+  /** The month's budget not spent yet, added over the categories. */
+  leftToSpendCents: number;
   status: 'onTrack' | 'watch' | 'danger';
   /** Shown as a legend while the pointer is over the status (or a finger is held on it). */
   statusReason: string;
@@ -164,7 +167,8 @@ function BalanceCard(props: {
         </ThemedText>
       </Pressable>
       <View style={styles.between}>
-        <Stat label="Started with" cents={props.startingCents} onPress={() => router.navigate('/accounts')} />
+        <Stat label="Started with" cents={props.startingCents} onPress={() => router.push('/plan')} />
+        <Stat label="Left to spend" cents={props.leftToSpendCents} />
         <Stat label="Planned end" cents={props.plannedCents} />
       </View>
       <View style={[styles.between, styles.incomeRow, { borderTopColor: theme.separator }]}>
@@ -195,7 +199,13 @@ function Stat({
       <ThemedText type="small" themeColor="textSecondary">
         {label}
       </ThemedText>
-      <Money cents={cents} type="smallBold" color={color} />
+      {/* A little smaller than usual and kept on one line, so three stats fit across a phone. */}
+      <ThemedText
+        type="smallBold"
+        numberOfLines={1}
+        style={[styles.statAmount, color ? { color } : null]}>
+        {formatCents(cents, CURRENCY)}
+      </ThemedText>
     </Pressable>
   );
 }
@@ -288,6 +298,7 @@ function CategoryTile({
 }
 
 const styles = StyleSheet.create({
+  statAmount: { fontSize: 13, fontVariant: ['tabular-nums'] },
   // Floats under the status label, over the rest of the card.
   legend: {
     position: 'absolute',

@@ -15,17 +15,20 @@ import type { Db, Settlement } from '../types';
  * It covers every month: the balance is a running total, not a monthly one.
  */
 export async function getSplitTotals(db: Db): Promise<SplitTotals> {
-  // amount_cents / 2 is integer division: each expense's half is rounded down on its own,
-  // the same rule as sharedHalfOwedCents().
+  // Integer division rounds each expense's share down on its own, the same rule as shareCents():
+  // what the person who did not pay owes. The owner's share is owner_share_pct, the other
+  // person's is the rest.
   const expenses = await db.getAllAsync<{
     paid_by: Person;
     for_whom: ForWhom;
     total: number;
-    halves: number;
+    owed: number;
   }>(
-    `SELECT paid_by, for_whom, SUM(amount_cents) AS total, SUM(amount_cents / 2) AS halves
+    `SELECT paid_by, for_whom, SUM(amount_cents) AS total,
+            SUM(CASE WHEN paid_by = ? THEN amount_cents * (100 - owner_share_pct) / 100
+                     ELSE amount_cents * owner_share_pct / 100 END) AS owed
      FROM expenses WHERE deleted_at IS NULL GROUP BY paid_by, for_whom`,
-    [],
+    [BUDGET_OWNER],
   );
   const settlements = await db.getAllAsync<{ from_person: Person; total: number }>(
     `SELECT from_person, SUM(amount_cents) AS total FROM settlements
@@ -34,7 +37,7 @@ export async function getSplitTotals(db: Db): Promise<SplitTotals> {
   );
   // Refunds the owner received: the same rule as refundOwedToOtherCents(), refund by refund.
   const refunds = await db.getFirstAsync<{ total: number | null }>(
-    `SELECT SUM(CASE WHEN for_whom = 'shared' THEN amount_cents / 2
+    `SELECT SUM(CASE WHEN for_whom = 'shared' THEN amount_cents * (100 - owner_share_pct) / 100
                      WHEN for_whom <> ? THEN amount_cents
                      ELSE 0 END) AS total
      FROM incomes WHERE deleted_at IS NULL AND category_id IS NOT NULL`,
@@ -43,13 +46,13 @@ export async function getSplitTotals(db: Db): Promise<SplitTotals> {
 
   const spent = (paidBy: Person, forWhom: ForWhom) =>
     expenses.find((r) => r.paid_by === paidBy && r.for_whom === forWhom)?.total ?? 0;
-  const halves = (paidBy: Person) =>
-    expenses.find((r) => r.paid_by === paidBy && r.for_whom === 'shared')?.halves ?? 0;
+  const owedTo = (paidBy: Person) =>
+    expenses.find((r) => r.paid_by === paidBy && r.for_whom === 'shared')?.owed ?? 0;
   const settled = (from: Person) => settlements.find((r) => r.from_person === from)?.total ?? 0;
 
   return {
     sharedPaidBy: { sergio: spent('sergio', 'shared'), adriana: spent('adriana', 'shared') },
-    sharedOwedTo: { sergio: halves('sergio'), adriana: halves('adriana') },
+    sharedOwedTo: { sergio: owedTo('sergio'), adriana: owedTo('adriana') },
     paidForOtherBy: { sergio: spent('sergio', 'adriana'), adriana: spent('adriana', 'sergio') },
     settledBy: { sergio: settled('sergio'), adriana: settled('adriana') },
     refundsOwedToOther: refunds?.total ?? 0,

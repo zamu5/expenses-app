@@ -7,7 +7,7 @@ import {
   ownerShareCents,
   refundOwedToOtherCents,
   refundOwnerShareCents,
-  sharedHalfOwedCents,
+  shareCents,
   type SplitTotals,
 } from './split';
 
@@ -59,15 +59,60 @@ describe('describeBalance', () => {
   });
 });
 
-describe('sharedHalfOwedCents', () => {
-  it('is exactly half of an even amount', () => {
-    expect(sharedHalfOwedCents(8334)).toBe(4167);
-    expect(sharedHalfOwedCents(0)).toBe(0);
+describe('shareCents', () => {
+  it('is exactly half of an even amount at 50%', () => {
+    expect(shareCents(8334, 50)).toBe(4167);
+    expect(shareCents(0, 50)).toBe(0);
   });
 
-  it('leaves the odd cent with whoever paid', () => {
-    expect(sharedHalfOwedCents(8335)).toBe(4167);
-    expect(sharedHalfOwedCents(1)).toBe(0);
+  it('rounds down, so the odd cent stays with whoever paid', () => {
+    expect(shareCents(8335, 50)).toBe(4167);
+    expect(shareCents(1, 50)).toBe(0);
+    expect(shareCents(1001, 40)).toBe(400);
+  });
+
+  it('handles the extremes', () => {
+    expect(shareCents(8335, 0)).toBe(0);
+    expect(shareCents(8335, 100)).toBe(8335);
+  });
+});
+
+describe('a split other than half and half', () => {
+  // The owner takes 60% of shared expenses, the other person 40%.
+  const at60 = (amountCents: number, paidBy: 'sergio' | 'adriana') =>
+    ({ amountCents, paidBy, forWhom: 'shared', ownerSharePct: 60 }) as const;
+
+  it('owner paid: the other person owes their 40%', () => {
+    expect(expenseDebt(at60(10000, 'sergio'))).toEqual({ debtor: 'adriana', cents: 4000 });
+    expect(ownerShareCents(at60(10000, 'sergio'))).toBe(6000);
+  });
+
+  it('other person paid: the owner owes their 60%', () => {
+    expect(expenseDebt(at60(10000, 'adriana'))).toEqual({ debtor: 'sergio', cents: 6000 });
+    expect(ownerShareCents(at60(10000, 'adriana'))).toBe(6000);
+  });
+
+  it('keeps the odd cent with the payer, each way', () => {
+    // 10.01: 40% is 4.004 and 60% is 6.006; the debtor's part is rounded down.
+    expect(expenseDebt(at60(1001, 'sergio'))).toEqual({ debtor: 'adriana', cents: 400 });
+    expect(ownerShareCents(at60(1001, 'sergio'))).toBe(601);
+    expect(expenseDebt(at60(1001, 'adriana'))).toEqual({ debtor: 'sergio', cents: 600 });
+    expect(ownerShareCents(at60(1001, 'adriana'))).toBe(600);
+  });
+
+  it('the share and the debt always add up to what the owner paid', () => {
+    for (const pct of [0, 33, 50, 60, 100]) {
+      for (const amountCents of [1, 999, 1001, 8335]) {
+        const e = { amountCents, paidBy: 'sergio', forWhom: 'shared', ownerSharePct: pct } as const;
+        expect(ownerShareCents(e) + expenseDebt(e)!.cents).toBe(amountCents);
+      }
+    }
+  });
+
+  it('applies to refunds too', () => {
+    const refund = { amountCents: 1001, forWhom: 'shared', ownerSharePct: 60 } as const;
+    expect(refundOwedToOtherCents(refund)).toBe(400);
+    expect(refundOwnerShareCents(refund)).toBe(601);
   });
 });
 

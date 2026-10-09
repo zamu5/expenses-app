@@ -1,5 +1,5 @@
 import type { MonthKey } from '@/domain/dates';
-import type { ForWhom, Person } from '@/domain/split';
+import { DEFAULT_OWNER_SHARE_PCT, type ForWhom, type Person } from '@/domain/split';
 import { newId, nowISO } from '@/lib/id';
 
 import { notifyDataChanged } from '../events';
@@ -14,6 +14,7 @@ interface ExpenseRow {
   paid_by: Person;
   for_whom: ForWhom;
   payment_account_id: string | null;
+  owner_share_pct: number;
 }
 
 const toExpense = (r: ExpenseRow): Expense => ({
@@ -25,24 +26,31 @@ const toExpense = (r: ExpenseRow): Expense => ({
   paidBy: r.paid_by,
   forWhom: r.for_whom,
   paymentAccountId: r.payment_account_id,
+  ownerSharePct: r.owner_share_pct,
 });
 
-const COLUMNS = 'id, category_id, amount_cents, spent_on, note, paid_by, for_whom, payment_account_id';
+const COLUMNS =
+  'id, category_id, amount_cents, spent_on, note, paid_by, for_whom, payment_account_id, owner_share_pct';
 
 export interface ExpenseInput {
   categoryId: string;
   amountCents: number;
   spentOn: string;
   note?: string | null;
-  /** Who paid. Defaults to Sergio. */
+  /** Who paid. Defaults to the budget owner. */
   paidBy?: Person;
-  /** Who it was for: both 50/50, or one person only. Defaults to 'shared'. */
+  /** Who it was for: both (split by ownerSharePct), or one person only. Defaults to 'shared'. */
   forWhom?: ForWhom;
   /**
    * The account or credit card it was paid with. Its balance goes down by the full amount
    * (a card's debt grows). Leave empty when the other person paid: it is not the owner's money.
    */
   paymentAccountId?: string | null;
+  /**
+   * The owner's share of a shared expense, 0-100, chosen on the expense form. Left out, a new
+   * expense is half and half and an edited one keeps what it had.
+   */
+  ownerSharePct?: number;
 }
 
 const cleanNote = (note?: string | null) => (note?.trim() ? note.trim() : null);
@@ -66,8 +74,8 @@ async function insertExpense(db: Db, input: ExpenseInput): Promise<string> {
   await db.runAsync(
     `INSERT INTO expenses
        (id, category_id, amount_cents, spent_on, note, paid_by, for_whom, payment_account_id,
-        created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        owner_share_pct, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       input.categoryId,
@@ -77,6 +85,7 @@ async function insertExpense(db: Db, input: ExpenseInput): Promise<string> {
       input.paidBy ?? 'sergio',
       input.forWhom ?? 'shared',
       input.paymentAccountId ?? null,
+      input.ownerSharePct ?? DEFAULT_OWNER_SHARE_PCT,
       now,
       now,
     ],
@@ -91,7 +100,8 @@ async function changeExpense(db: Db, id: string, input: ExpenseInput): Promise<v
   if (!before) throw new Error('This expense no longer exists');
   await db.runAsync(
     `UPDATE expenses SET category_id = ?, amount_cents = ?, spent_on = ?, note = ?,
-       paid_by = ?, for_whom = ?, payment_account_id = ?, updated_at = ?
+       paid_by = ?, for_whom = ?, payment_account_id = ?,
+       owner_share_pct = COALESCE(?, owner_share_pct), updated_at = ?
      WHERE id = ?`,
     [
       input.categoryId,
@@ -101,6 +111,7 @@ async function changeExpense(db: Db, id: string, input: ExpenseInput): Promise<v
       input.paidBy ?? 'sergio',
       input.forWhom ?? 'shared',
       input.paymentAccountId ?? null,
+      input.ownerSharePct ?? null,
       now,
       id,
     ],
@@ -169,7 +180,7 @@ export async function listExpenses(
 export async function listDebtExpenses(db: Db): Promise<(Expense & { categoryName: string })[]> {
   const rows = await db.getAllAsync<ExpenseRow & { category_name: string }>(
     `SELECT e.id, e.category_id, e.amount_cents, e.spent_on, e.note, e.paid_by, e.for_whom,
-            e.payment_account_id, c.name AS category_name
+            e.payment_account_id, e.owner_share_pct, c.name AS category_name
      FROM expenses e JOIN categories c ON c.id = e.category_id
      WHERE e.deleted_at IS NULL AND e.for_whom <> e.paid_by
      ORDER BY e.spent_on DESC, e.created_at DESC`,

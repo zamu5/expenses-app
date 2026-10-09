@@ -4,20 +4,22 @@ import { useState } from 'react';
 import { Alert, StyleSheet, View } from 'react-native';
 
 import { DateField } from '@/components/date-field';
+import { SplitBar } from '@/components/split-bar';
 import { ThemedText } from '@/components/themed-text';
 import { Button, Chips, Field, Screen, SectionLabel } from '@/components/ui';
-import { CURRENCY, PEOPLE } from '@/config';
+import { CURRENCY } from '@/config';
 import { listAccounts } from '@/db/repositories/accounts';
 import { listCategories, listCategoriesForMonth } from '@/db/repositories/categories';
 import { addIncome, deleteIncome, getIncome, updateIncome } from '@/db/repositories/incomes';
 import type { Account, Category, Income } from '@/db/types';
 import { monthKeyOf, todayISO } from '@/domain/dates';
 import { centsToInputText, parseAmountToCents } from '@/domain/money';
-import type { ForWhom } from '@/domain/split';
+import { DEFAULT_OWNER_SHARE_PCT, refundOwnerShareCents, type ForWhom } from '@/domain/split';
 import { useDbQuery } from '@/hooks/use-db-query';
 import { useTheme } from '@/hooks/use-theme';
 import { confirmDestructive } from '@/lib/confirm';
 import { useUiStore } from '@/store/ui';
+import { usePeople } from '@/store/people';
 
 /** Add money you received (salary, a refund), or edit it when opened with ?id=. */
 export default function IncomeScreen() {
@@ -56,6 +58,7 @@ function IncomeForm({
   accounts: Account[];
   categories: Category[];
 }) {
+  const people = usePeople();
   const db = useSQLiteContext();
   const theme = useTheme();
   const selectedMonth = useUiStore((s) => s.selectedMonth);
@@ -72,6 +75,9 @@ function IncomeForm({
   );
   const [categoryId, setCategoryId] = useState<string | null>(income?.categoryId ?? null);
   const [forWhom, setForWhom] = useState<ForWhom>(income?.forWhom ?? 'sergio');
+  const [sharePct, setSharePct] = useState(income?.ownerSharePct ?? DEFAULT_OWNER_SHARE_PCT);
+  // The split only matters for a refund that is shared.
+  const usesShare = categoryId !== null && forWhom === 'shared';
   const [saving, setSaving] = useState(false);
 
   // A refund can be for any category in the plan of its month, plus the one already chosen.
@@ -85,11 +91,23 @@ function IncomeForm({
 
   const amountCents = parseAmountToCents(amountText);
   const canSave = amountCents !== null && amountCents > 0 && !saving;
+  const refundOwnerCents =
+    amountCents && amountCents > 0
+      ? refundOwnerShareCents({ amountCents, forWhom: 'shared', ownerSharePct: sharePct })
+      : undefined;
 
   async function save() {
     if (!canSave) return;
     setSaving(true);
-    const input = { amountCents, receivedOn, note, accountId, categoryId, forWhom };
+    const input = {
+      amountCents,
+      receivedOn,
+      note,
+      accountId,
+      categoryId,
+      forWhom,
+      ownerSharePct: usesShare ? sharePct : undefined,
+    };
     try {
       if (income) await updateIncome(db, income.id, input);
       else await addIncome(db, input);
@@ -163,13 +181,24 @@ function IncomeForm({
           <SectionLabel>The refund is for</SectionLabel>
           <Chips
             options={[
-              { value: 'sergio', label: `Only ${PEOPLE.sergio}` },
-              { value: 'shared', label: 'Shared 50/50' },
-              { value: 'adriana', label: `Only ${PEOPLE.adriana}` },
+              { value: 'sergio', label: `Only ${people.sergio}` },
+              { value: 'shared', label: 'Shared' },
+              { value: 'adriana', label: `Only ${people.adriana}` },
             ]}
             value={forWhom}
             onChange={setForWhom}
           />
+          {usesShare ? (
+            <SplitBar
+              value={sharePct}
+              onChange={setSharePct}
+              people={people}
+              ownerCents={refundOwnerCents}
+              otherCents={
+                refundOwnerCents === undefined || !amountCents ? undefined : amountCents - refundOwnerCents
+              }
+            />
+          ) : null}
         </>
       ) : null}
 

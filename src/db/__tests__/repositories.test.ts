@@ -47,6 +47,7 @@ import {
   getSplitTotals,
   listSettlements,
 } from '../repositories/settlements';
+import { DEFAULT_PEOPLE_NAMES, getPeopleNames, setPeopleNames } from '../repositories/settings';
 import type { Db } from '../types';
 import { createTestDb } from './node-db';
 
@@ -421,32 +422,24 @@ describe('the budget counts only your share', () => {
   });
 });
 
-describe('include in starting balance', () => {
-  it('is on by default and can be switched off per account', async () => {
-    const id = await createAccount(db, { name: 'Investments', kind: 'account', currency: 'CAD', balanceCents: 1000000, balanceUpdatedOn: '2026-10-07' });
-    expect((await listAccounts(db))[0].includeInStart).toBe(true);
+describe('what a month starts with', () => {
+  it('is saved with the plan and kept when only budgets change', async () => {
+    const fun = await idOf('Fun');
+    await saveMonthPlan(db, { month: '2026-10', startingBalanceCents: 1219715, budgets: [{ categoryId: fun, amountCents: 100 }] });
+    expect((await getMonth(db, '2026-10'))?.startingBalanceCents).toBe(1219715);
 
-    await updateAccount(db, id, { name: 'Investments', kind: 'account', currency: 'CAD', balanceCents: 1000000, includeInStart: false, balanceUpdatedOn: '2026-10-07' });
-    expect((await listAccounts(db))[0].includeInStart).toBe(false);
+    // Saving without it (a budget change, or the plan of a later month) leaves it alone.
+    await setBudget(db, '2026-10', fun, 200);
+    await saveMonthPlan(db, { month: '2026-10', budgets: [] });
+    expect((await getMonth(db, '2026-10'))?.startingBalanceCents).toBe(1219715);
+
+    await saveMonthPlan(db, { month: '2026-10', startingBalanceCents: 1300000, budgets: [] });
+    expect((await getMonth(db, '2026-10'))?.startingBalanceCents).toBe(1300000);
   });
 
-  it('survives a backup and restore', async () => {
-    await createAccount(db, { name: 'Off', kind: 'account', currency: 'CAD', balanceCents: 1, includeInStart: false, balanceUpdatedOn: '2026-10-07' });
-    const parsed = parseBackup(JSON.stringify(await exportBackup(db)), LATEST_SCHEMA_VERSION);
-    if (!parsed.ok) throw new Error(parsed.error);
-    await restoreBackup(db, parsed.backup);
-    expect((await listAccounts(db))[0].includeInStart).toBe(false);
-  });
-
-  it('is switched on for accounts that existed before the flag', async () => {
-    // A backup from schema 4 has no include_in_start column; restoring fills in the default.
-    const parsed = parseBackup(JSON.stringify(await exportBackup(db)), LATEST_SCHEMA_VERSION);
-    if (!parsed.ok) throw new Error(parsed.error);
-    parsed.backup.tables.accounts = [
-      { id: 'old', name: 'Old', kind: 'account', currency: 'CAD', balance_cents: 5, is_budget_account: 0, balance_updated_on: '2026-10-01', sort_order: 0, created_at: 'x', updated_at: 'x', deleted_at: null },
-    ];
-    await restoreBackup(db, parsed.backup);
-    expect((await listAccounts(db))[0]).toMatchObject({ name: 'Old', includeInStart: true });
+  it('is zero for a month saved without one', async () => {
+    await saveMonthPlan(db, { month: '2026-10', budgets: [] });
+    expect((await getMonth(db, '2026-10'))?.startingBalanceCents).toBe(0);
   });
 });
 
@@ -836,5 +829,155 @@ describe('bank and investment accounts', () => {
     );
     await migrate(db);
     expect((await named('Old')).accountType).toBe('bank');
+  });
+});
+
+describe('the two names are a setting', () => {
+  it('start neutral on a new database and can be changed', async () => {
+    expect(await getPeopleNames(db)).toEqual(DEFAULT_PEOPLE_NAMES);
+    await setPeopleNames(db, { sergio: ' Ana ', adriana: 'Luis' });
+    expect(await getPeopleNames(db)).toEqual({ sergio: 'Ana', adriana: 'Luis' });
+    // An empty name goes back to the neutral one.
+    await setPeopleNames(db, { sergio: '', adriana: 'Luis' });
+    expect(await getPeopleNames(db)).toEqual({ sergio: DEFAULT_PEOPLE_NAMES.sergio, adriana: 'Luis' });
+  });
+
+  it('a database that already had data keeps the names it was shown with', async () => {
+    db = createTestDb();
+    await migrate(db, 10);
+    const fun = (await db.getFirstAsync<{ id: string }>("SELECT id FROM categories WHERE name = 'Fun'", []))!.id;
+    await db.runAsync(
+      `INSERT INTO expenses (id, category_id, amount_cents, spent_on, created_at, updated_at)
+       VALUES ('e1', ?, 100, '2026-10-01', 'x', 'x')`,
+      [fun],
+    );
+    await migrate(db);
+    expect(await getPeopleNames(db)).toEqual({ sergio: 'Sergio', adriana: 'Adriana' });
+  });
+
+  it('an upgrade of an empty database stays neutral', async () => {
+    db = createTestDb();
+    await migrate(db, 10);
+    await migrate(db);
+    expect(await getPeopleNames(db)).toEqual(DEFAULT_PEOPLE_NAMES);
+  });
+
+  it('travel with a backup, and an old backup leaves the names alone', async () => {
+    await setPeopleNames(db, { sergio: 'Ana', adriana: 'Luis' });
+    const parsed = parseBackup(JSON.stringify(await exportBackup(db)), LATEST_SCHEMA_VERSION);
+    if (!parsed.ok) throw new Error(parsed.error);
+    expect(parsed.backup.people).toEqual({ sergio: 'Ana', adriana: 'Luis' });
+
+    db = createTestDb();
+    await migrate(db);
+    await restoreBackup(db, parsed.backup);
+    expect(await getPeopleNames(db)).toEqual({ sergio: 'Ana', adriana: 'Luis' });
+
+    // A backup made before names were a setting has no names in it.
+    delete parsed.backup.people;
+    await setPeopleNames(db, { sergio: 'Kept', adriana: 'Also kept' });
+    await restoreBackup(db, parsed.backup);
+    expect(await getPeopleNames(db)).toEqual({ sergio: 'Kept', adriana: 'Also kept' });
+  });
+});
+
+describe('a split chosen on each shared expense', () => {
+  const spentIn = async (categoryId: string) =>
+    (await getMonthCategoryInputs(db, '2026-10')).find((c) => c.id === categoryId)!.spentCents;
+  const shared = (categoryId: string, amountCents: number, paidBy: 'sergio' | 'adriana', ownerSharePct?: number) =>
+    addExpense(db, { categoryId, amountCents, spentOn: '2026-10-05', paidBy, forWhom: 'shared', ownerSharePct });
+
+  it('is half and half unless the expense says otherwise', async () => {
+    const fun = await idOf('Fun');
+    await shared(fun, 10000, 'sergio');
+    expect((await listExpenses(db, '2026-10'))[0].ownerSharePct).toBe(50);
+    expect(balanceCents(await getSplitTotals(db))).toBe(5000);
+  });
+
+  it('60/40 each way, odd cents included', async () => {
+    const fun = await idOf('Fun');
+    await saveMonthPlan(db, { month: '2026-10', budgets: [{ categoryId: fun, amountCents: 100000 }] });
+
+    await shared(fun, 1001, 'sergio', 60);
+    // The other person owes 40% rounded down (4.00); the payer keeps the rest (6.01).
+    expect(balanceCents(await getSplitTotals(db))).toBe(400);
+    expect(await spentIn(fun)).toBe(601);
+
+    await shared(fun, 1001, 'adriana', 60);
+    // Now the owner owes 60% rounded down (6.00): 4.00 - 6.00.
+    expect(balanceCents(await getSplitTotals(db))).toBe(-200);
+    expect(await spentIn(fun)).toBe(1201);
+  });
+
+  it('editing keeps the split unless a new one is given', async () => {
+    const fun = await idOf('Fun');
+    const id = await shared(fun, 10000, 'sergio', 70);
+    await updateExpense(db, id, { categoryId: fun, amountCents: 20000, spentOn: '2026-10-05', paidBy: 'sergio', forWhom: 'shared' });
+    expect((await listExpenses(db, '2026-10'))[0].ownerSharePct).toBe(70);
+    expect(balanceCents(await getSplitTotals(db))).toBe(6000);
+
+    await updateExpense(db, id, { categoryId: fun, amountCents: 20000, spentOn: '2026-10-05', paidBy: 'sergio', forWhom: 'shared', ownerSharePct: 50 });
+    expect(balanceCents(await getSplitTotals(db))).toBe(10000);
+  });
+
+  it('refuses a share outside 0 to 100', async () => {
+    const fun = await idOf('Fun');
+    await expect(shared(fun, 10000, 'sergio', 101)).rejects.toThrow(/CHECK/);
+  });
+
+  it('shared refunds have their own split', async () => {
+    const fun = await idOf('Fun');
+    await saveMonthPlan(db, { month: '2026-10', budgets: [{ categoryId: fun, amountCents: 100000 }] });
+    await shared(fun, 20000, 'sergio', 60);
+    await addIncome(db, { amountCents: 10000, receivedOn: '2026-10-09', categoryId: fun, forWhom: 'shared', ownerSharePct: 60 });
+    // Owed: 40% of 200.00 minus 40% of the 100.00 refund. Spent: 60% of each.
+    expect(balanceCents(await getSplitTotals(db))).toBe(4000);
+    expect(await spentIn(fun)).toBe(6000);
+  });
+
+  it('every line still adds up to the headline with mixed splits', async () => {
+    const fun = await idOf('Fun');
+    for (const [pct, amount, payer] of [[50, 8335, 'sergio'], [60, 1001, 'sergio'], [60, 4999, 'adriana'], [25, 333, 'adriana']] as const) {
+      await shared(fun, amount, payer, pct);
+    }
+    const lines = (await listDebtExpenses(db)).map((e) => expenseDebt(e)!);
+    const owedBy = (debtor: string) => lines.filter((l) => l.debtor === debtor).reduce((sum, l) => sum + l.cents, 0);
+    expect(balanceCents(await getSplitTotals(db))).toBe(owedBy('adriana') - owedBy('sergio'));
+
+    const spent = (await getMonthCategoryInputs(db, '2026-10')).find((c) => c.id === fun)!.spentCents;
+    expect(spent).toBe((await listExpenses(db, '2026-10')).reduce((sum, e) => sum + ownerShareCents(e), 0));
+  });
+
+  it('expenses from before the upgrade are half and half', async () => {
+    db = createTestDb();
+    await migrate(db, 11);
+    const fun = (await db.getFirstAsync<{ id: string }>("SELECT id FROM categories WHERE name = 'Fun'", []))!.id;
+    await db.runAsync(
+      `INSERT INTO expenses (id, category_id, amount_cents, spent_on, paid_by, for_whom, created_at, updated_at)
+       VALUES ('e1', ?, 10000, '2026-10-01', 'sergio', 'shared', 'x', 'x')`,
+      [fun],
+    );
+    await migrate(db);
+    expect((await listExpenses(db, '2026-10'))[0].ownerSharePct).toBe(50);
+    expect(balanceCents(await getSplitTotals(db))).toBe(5000);
+  });
+
+  it('travels with a backup, and an old backup restores as half and half', async () => {
+    const fun = await idOf('Fun');
+    await shared(fun, 10000, 'sergio', 60);
+    const parsed = parseBackup(JSON.stringify(await exportBackup(db)), LATEST_SCHEMA_VERSION);
+    if (!parsed.ok) throw new Error(parsed.error);
+
+    db = createTestDb();
+    await migrate(db);
+    await restoreBackup(db, parsed.backup);
+    expect(balanceCents(await getSplitTotals(db))).toBe(4000);
+
+    // A backup from before this existed has no such column on its rows.
+    parsed.backup.tables.expenses = parsed.backup.tables.expenses.map(({ owner_share_pct, ...rest }) => rest);
+    db = createTestDb();
+    await migrate(db);
+    await restoreBackup(db, parsed.backup);
+    expect(balanceCents(await getSplitTotals(db))).toBe(5000);
   });
 });
