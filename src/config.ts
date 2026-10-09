@@ -22,6 +22,11 @@ export const AUTO_BACKUP = {
    * they get separate files; give them the same name only if you want the last one to win.
    */
   fileName: { web: 'latest.json', phone: 'latest-phone.json' },
+  /**
+   * A browser can be told to save to another file, for testing without touching the real backup:
+   * run localStorage.setItem('autoBackupFile', 'test.json') in its console and reload.
+   */
+  overrideKey: 'autoBackupFile',
   /** How long to wait after a change before saving, so a burst of changes is saved once. */
   delayMs: 2000,
 };

@@ -17,6 +17,10 @@ describe('autoBackupUrl', () => {
     expect(autoBackupUrl({ serverUrl: null, fileName }, 'ios', undefined)).toBeNull();
   });
 
+  it('uses the file name one browser was told to use', () => {
+    expect(autoBackupUrl({ serverUrl: null, fileName }, 'web', undefined, 'test.json')).toBe('/__backup/test.json');
+  });
+
   it('prefers the configured server', () => {
     expect(autoBackupUrl({ serverUrl: 'http://mac.local:8082/', fileName }, 'ios', undefined)).toBe(
       'http://mac.local:8082/__backup/latest-phone.json',

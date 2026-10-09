@@ -13,8 +13,9 @@ export function autoBackupUrl(
   config: Pick<typeof AUTO_BACKUP, 'serverUrl' | 'fileName'>,
   platform: string,
   devServerHost: string | undefined,
+  fileOverride?: string | null,
 ): string | null {
-  const file = platform === 'web' ? config.fileName.web : config.fileName.phone;
+  const file = fileOverride || (platform === 'web' ? config.fileName.web : config.fileName.phone);
   let server: string;
   if (config.serverUrl) server = config.serverUrl.replace(/\/+$/, '');
   // In a browser the page itself came from the server, so a relative address reaches it.
@@ -22,6 +23,20 @@ export function autoBackupUrl(
   else if (devServerHost) server = `http://${devServerHost}`;
   else return null;
   return `${server}/__backup/${file}`;
+}
+
+/**
+ * The file name this one browser was told to use instead of the configured one, if any. It lets
+ * a browser used for testing save to its own file and leave the real backup alone. Set it in the
+ * browser's console: localStorage.setItem('autoBackupFile', 'test.json'), then reload.
+ */
+export function browserFileOverride(): string | null {
+  try {
+    return Platform.OS === 'web' ? globalThis.localStorage?.getItem(AUTO_BACKUP.overrideKey) || null : null;
+  } catch {
+    // Storage can be blocked (private windows); the configured name is used then.
+    return null;
+  }
 }
 
 /**
@@ -74,7 +89,7 @@ export function createDebouncedSaver(save: () => Promise<void>, delayMs: number)
 export function startAutoBackup(db: Db): () => void {
   const { setStatus } = useAutoBackupStore.getState();
   const url = AUTO_BACKUP.enabled
-    ? autoBackupUrl(AUTO_BACKUP, Platform.OS, Constants.expoConfig?.hostUri)
+    ? autoBackupUrl(AUTO_BACKUP, Platform.OS, Constants.expoConfig?.hostUri, browserFileOverride())
     : null;
   if (!url) {
     setStatus({ state: 'off' });

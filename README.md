@@ -172,6 +172,10 @@ An app cannot write to a folder on the Mac by itself, so the dev server does it
 while it can reach the dev server on the Mac. Away from it, or in a standalone build, the
 automatic save does nothing and Settings says so; use **Export backup** there.
 
+To try things in another browser without touching the real backup, tell that browser to save to
+its own file: run `localStorage.setItem('autoBackupFile', 'test.json')` in its console and reload.
+Settings then shows `test.json` as the file it saves to.
+
 What you can change:
 
 | Setting | Where | Default |
